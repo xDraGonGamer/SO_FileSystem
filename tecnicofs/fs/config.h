@@ -4,6 +4,8 @@
 /* FS root inode number */
 #define ROOT_DIR_INUM (0)
 
+
+#define INODE_BLOCK_COUNT (11)
 #define BLOCK_SIZE (1024)
 #define DATA_BLOCKS (1024)
 #define INODE_TABLE_SIZE (50)

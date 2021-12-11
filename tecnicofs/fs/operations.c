@@ -118,10 +118,12 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     if (to_write > 0) {
         if (inode->i_size == 0) {
             /* If empty file, allocate new block */
-            inode->i_data_block = data_block_alloc();
+            inode->i_data_block[0] = data_block_alloc();
         }
 
-        void *block = data_block_get(inode->i_data_block);
+        int curr_block = get_current_writting_block(inode);
+
+        void *block = data_block_get(curr_block);
         if (block == NULL) {
             return -1;
         }

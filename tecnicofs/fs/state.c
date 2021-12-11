@@ -10,7 +10,8 @@
  * memory; for simplicity, this project maintains it in primary memory) */
 
 /* I-node table */
-static inode_t inode_table[INODE_TABLE_SIZE];
+static root_inode_t root_inode; 
+static inode_t inode_table[INODE_TABLE_SIZE-1]; // Still to be checked
 static char freeinode_ts[INODE_TABLE_SIZE];
 
 /* Data blocks */
@@ -81,6 +82,38 @@ void state_init() {
 void state_destroy() { /* nothing to do */
 }
 
+
+int root_create(){
+    insert_delay(); // simulate storage access delay (to i-node)
+    if (freeinode_ts[ROOT_DIR_INUM] == FREE) {
+        /* Found a free entry, so takes it for the new i-node*/
+        freeinode_ts[ROOT_DIR_INUM] = TAKEN;
+        insert_delay(); // simulate storage access delay (to i-node)
+        root_inode.i_node_type = T_DIRECTORY;    
+    }
+    int b = data_block_alloc();
+    if (b == -1) {
+        freeinode_ts[ROOT_DIR_INUM] = FREE;
+        return -1;
+    }
+
+    root_inode.i_size = BLOCK_SIZE;
+    root_inode.i_data_block = b;
+
+    dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(b);
+    if (dir_entry == NULL) {
+        freeinode_ts[ROOT_DIR_INUM] = FREE;
+        return -1;
+    }
+
+    for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
+        dir_entry[i].d_inumber = -1;
+    }
+
+    //TODO avoid repeating code
+}
+
+
 /*
  * Creates a new i-node in the i-node table.
  * Input:
@@ -111,7 +144,7 @@ int inode_create(inode_type n_type) {
                 }
 
                 inode_table[inumber].i_size = BLOCK_SIZE;
-                inode_table[inumber].i_data_block = b;
+                inode_table[inumber].i_data_block[0] = b;
 
                 dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(b);
                 if (dir_entry == NULL) {
@@ -125,7 +158,7 @@ int inode_create(inode_type n_type) {
             } else {
                 /* In case of a new file, simply sets its size to 0 */
                 inode_table[inumber].i_size = 0;
-                inode_table[inumber].i_data_block = -1;
+                //inode_table[inumber].i_data_block = -1;
             }
             return inumber;
         }
@@ -175,6 +208,16 @@ inode_t *inode_get(int inumber) {
 
     insert_delay(); // simulate storage access delay to i-node
     return &inode_table[inumber];
+}
+
+
+int get_current_writting_block(inode_t* inode){
+    int block_number = inode->i_size % BLOCK_SIZE;
+    if (block_number<(INODE_BLOCK_COUNT-1)){
+        return inode->i_data_block[block_number];
+    } else {
+
+    }
 }
 
 /*

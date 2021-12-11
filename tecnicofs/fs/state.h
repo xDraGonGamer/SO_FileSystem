@@ -15,6 +15,7 @@ typedef struct {
     int d_inumber;
 } dir_entry_t;
 
+
 typedef enum { T_FILE, T_DIRECTORY } inode_type;
 
 /*
@@ -23,9 +24,15 @@ typedef enum { T_FILE, T_DIRECTORY } inode_type;
 typedef struct {
     inode_type i_node_type;
     size_t i_size;
-    int i_data_block;
+    int i_data_block[11];
     /* in a real FS, more fields would exist here */
 } inode_t;
+
+typedef struct {
+    inode_type i_node_type;
+    size_t i_size;
+    int i_data_block;
+} root_inode_t;
 
 typedef enum { FREE = 0, TAKEN = 1 } allocation_state_t;
 
@@ -42,6 +49,7 @@ typedef struct {
 void state_init();
 void state_destroy();
 
+int root_create();
 int inode_create(inode_type n_type);
 int inode_delete(int inumber);
 inode_t *inode_get(int inumber);
