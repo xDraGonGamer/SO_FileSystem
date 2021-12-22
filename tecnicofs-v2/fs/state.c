@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <math.h>
 
 /* Persistent FS state  (in reality, it should be maintained in secondary
  * memory; for simplicity, this project maintains it in primary memory) */
@@ -78,6 +79,12 @@ void state_init() {
     }
 }
 
+int getOccupiedBlocks(inode_t *inode){ //returns number of blocks with data in them
+
+    return (int) ceil(inode->i_size / BLOCK_SIZE);
+
+}
+
 void state_destroy() { /* nothing to do */
 }
 
@@ -89,7 +96,7 @@ void state_destroy() { /* nothing to do */
  *  new i-node's number if successfully created, -1 otherwise
  */
 int inode_create(inode_type n_type) {
-    for (int inumber = 0; inumber < INODE_TABLE_SIZE; inumber++) {
+    for (int inumber = 0; inumber < INODE_TABLE_SIZE; inumber++) { //for each inode in inodetable
         if ((inumber * (int) sizeof(allocation_state_t) % BLOCK_SIZE) == 0) {
             insert_delay(); // simulate storage access delay (to freeinode_ts)
         }
@@ -111,9 +118,9 @@ int inode_create(inode_type n_type) {
                 }
 
                 inode_table[inumber].i_size = BLOCK_SIZE;
-                inode_table[inumber].i_data_block = b;
+                inode_table[inumber].i_data_block[0] = b; //to change, data block is now vector
 
-                dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(b);
+                dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(b); //retorna lista das entradas do diretorio
                 if (dir_entry == NULL) {
                     freeinode_ts[inumber] = FREE;
                     return -1;
@@ -125,7 +132,7 @@ int inode_create(inode_type n_type) {
             } else {
                 /* In case of a new file, simply sets its size to 0 */
                 inode_table[inumber].i_size = 0;
-                inode_table[inumber].i_data_block = -1;
+                inode_table[inumber].i_data_block[0] = -1; //puts first value as invalid so as to mark empty
             }
             return inumber;
         }
@@ -141,6 +148,7 @@ int inode_create(inode_type n_type) {
  */
 int inode_delete(int inumber) {
     // simulate storage access delay (to i-node and freeinode_ts)
+    int j, i;
     insert_delay();
     insert_delay();
 
@@ -149,13 +157,43 @@ int inode_delete(int inumber) {
     }
 
     freeinode_ts[inumber] = FREE;
-
-    if (inode_table[inumber].i_size > 0) {
-        if (data_block_free(inode_table[inumber].i_data_block) == -1) {
+    if (inode_table[inumber].i_size > 0) { //TODO insert delay 
+        if(deleteInodeDataBlocks(&inode_table[inumber]) == -1){
             return -1;
         }
     }
 
+    return 0;
+}
+
+
+int freeIndirectBlocks(inode_t *inode, int j){
+    int i, *indirectionBlock = (int*)data_block_get(inode->indirect_data_block);
+    if(indirectionBlock == NULL){
+        return -1;
+    }
+    j -= 10;
+    for(i = 0; i < j; i++){
+        if (data_block_free(*(indirectionBlock + i)) == -1) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int deleteInodeDataBlocks(inode_t* inode){
+    int j = getOccupiedBlocks(inode);
+    if(j > 10){
+        if(freeIndirectBlocks(inode, j) == -1){
+            return -1;
+        }
+    }
+    j = min(10, j);
+    for(int i = 0; i < j; i ++){ //TODO insert delay, ver melhor memoria
+        if (data_block_free(inode->i_data_block[i]) == -1) {
+            return -1;
+        }
+    }
     return 0;
 }
 
@@ -198,7 +236,7 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
 
     /* Locates the block containing the directory's entries */
     dir_entry_t *dir_entry =
-        (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block);
+        (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block[0]);
     if (dir_entry == NULL) {
         return -1;
     }
@@ -231,7 +269,7 @@ int find_in_dir(int inumber, char const *sub_name) {
 
     /* Locates the block containing the directory's entries */
     dir_entry_t *dir_entry =
-        (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block);
+        (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block[0]);
     if (dir_entry == NULL) {
         return -1;
     }
@@ -256,9 +294,9 @@ int data_block_alloc() {
         if (i * (int) sizeof(allocation_state_t) % BLOCK_SIZE == 0) {
             insert_delay(); // simulate storage access delay to free_blocks
         }
-
+        //      lock
         if (free_blocks[i] == FREE) {
-            free_blocks[i] = TAKEN;
+            free_blocks[i] = TAKEN; 
             return i;
         }
     }

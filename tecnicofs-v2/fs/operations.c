@@ -46,10 +46,10 @@ int tfs_open(char const *name, int flags) {
         return -1;
     }
 
-    inum = tfs_lookup(name);
+    inum = tfs_lookup(name); //gets the inumber
     if (inum >= 0) {
         /* The file already exists */
-        inode_t *inode = inode_get(inum);
+        inode_t *inode = inode_get(inum); //gets the inode
         if (inode == NULL) {
             return -1;
         }
@@ -57,7 +57,7 @@ int tfs_open(char const *name, int flags) {
         /* Trucate (if requested) */
         if (flags & TFS_O_TRUNC) {
             if (inode->i_size > 0) {
-                if (data_block_free(inode->i_data_block) == -1) {
+                if (deleteInodeDataBlocks(inode) == -1) {
                     return -1;
                 }
                 inode->i_size = 0;
@@ -103,7 +103,6 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     if (file == NULL) {
         return -1;
     }
-
     /* From the open file table entry, we get the inode */
     inode_t *inode = inode_get(file->of_inumber);
     if (inode == NULL) {
@@ -111,11 +110,16 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     }
 
     /* Determine how many bytes to write */
-    if (to_write + file->of_offset > BLOCK_SIZE) {
-        to_write = BLOCK_SIZE - file->of_offset;
+    size_t sizeNeeded = to_write + file->of_offset;
+    if (sizeNeeded > MAX_FILE_SIZE) {
+        //to_write = MAX_FILE_SIZE - file->of_offset;
+        sizeNeeded = MAX_FILE_SIZE;
     }
 
     if (to_write > 0) {
+        if(allocNecessaryBlocks(inode, sizeNeeded) == -1){
+            return -1;
+        }
         if (inode->i_size == 0) {
             /* If empty file, allocate new block */
             inode->i_data_block = data_block_alloc();

@@ -6,7 +6,7 @@
 #include <sys/types.h>
 
 enum {
-    TFS_O_CREAT = 0b001,
+    TFS_O_CREAT = 0b001, //o 0b indica que e binario: 0b001 = 0b 001
     TFS_O_TRUNC = 0b010,
     TFS_O_APPEND = 0b100,
 };
