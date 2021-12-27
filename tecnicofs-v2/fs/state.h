@@ -25,6 +25,7 @@ typedef struct {
     size_t i_size;
     int i_data_block[10];
     int indirect_data_block;
+    short blocksAlloc;
     /* in a real FS, more fields would exist here */
 } inode_t;
 
@@ -39,6 +40,8 @@ typedef struct {
 } open_file_entry_t;
 
 #define MAX_DIR_ENTRIES (BLOCK_SIZE / sizeof(dir_entry_t))
+
+int divCeil(int i1,int i2);
 
 void state_init();
 void state_destroy();

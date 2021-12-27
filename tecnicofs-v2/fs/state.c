@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <math.h>
 
 /* Persistent FS state  (in reality, it should be maintained in secondary
  * memory; for simplicity, this project maintains it in primary memory) */
@@ -66,6 +65,12 @@ static void insert_delay() {
     }
 }
 
+
+int divCeil(int i1, int i2){
+    int out = i1 / i2;
+    return !(i1 % i2) ? out : out+1;
+}
+
 /*
  * Initializes FS state
  */
@@ -83,9 +88,9 @@ void state_init() {
     }
 }
 
-int getOccupiedBlocks(inode_t *inode){ //returns number of blocks with data in them
+int getNonEmptyBlocks(inode_t *inode){ //returns number of blocks with data in them
 
-    return (int) ceil(inode->i_size / BLOCK_SIZE);
+    return divCeil(inode->i_size,BLOCK_SIZE);
 
 }
 
@@ -123,6 +128,7 @@ int inode_create(inode_type n_type) {
 
                 inode_table[inumber].i_size = BLOCK_SIZE;
                 inode_table[inumber].i_data_block[0] = b; //to change, data block is now vector
+                inode_table[inumber].blocksAlloc = 1;
 
                 dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(b); //retorna lista das entradas do diretorio
                 if (dir_entry == NULL) {
@@ -136,7 +142,7 @@ int inode_create(inode_type n_type) {
             } else {
                 /* In case of a new file, simply sets its size to 0 */
                 inode_table[inumber].i_size = 0;
-                inode_table[inumber].i_data_block[0] = -1; //puts first value as invalid so as to mark empty
+                inode_table[inumber].blocksAlloc = 0;
             }
             return inumber;
         }
@@ -186,7 +192,7 @@ int freeIndirectBlocks(inode_t *inode, int j){
 }
 
 int deleteInodeDataBlocks(inode_t* inode){
-    int j = getOccupiedBlocks(inode);
+    int j = inode->blocksAlloc;
     if(j > 10){
         if(freeIndirectBlocks(inode, j) == -1){
             return -1;
@@ -309,7 +315,7 @@ int data_block_alloc() {
 
 void* getNthDataBlock(inode_t *inode, int nthBlock, char* errorHandler){
     *errorHandler = 0;
-    if (nthBlock > getOccupiedBlocks(inode)){
+    if (nthBlock > inode->blocksAlloc){
         if (valid_inode_block_number(nthBlock)){
             *errorHandler = 1;
         }
@@ -349,11 +355,13 @@ int allocNthDataBlock(inode_t *inode, int blockNumber){
     } else {
         inode->i_data_block[blockNumber] = b;
     }
+    inode->blocksAlloc++;
+    return 0;
 }
 
 int allocNecessaryBlocks(inode_t* inode, size_t sizeNeeded){
-    int blockOcc = getOccupiedBlocks(inode);
-    int blockNeeded = (int) ceil(sizeNeeded / BLOCK_SIZE);
+    int blockOcc = inode->blocksAlloc;
+    int blockNeeded = divCeil(sizeNeeded,BLOCK_SIZE);
     while(blockNeeded > blockOcc){
         blockOcc++;
         if (allocNthDataBlock(inode,blockOcc)==-1){

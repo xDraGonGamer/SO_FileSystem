@@ -126,7 +126,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
 
         /* Perform the actual write */
         // memcpy(block + file->of_offset, buffer, to_write);
-        int blockWriting = (int) ceil(file->of_offset / BLOCK_SIZE);
+        int blockWriting = !file->of_offset ? 1 : divCeil(file->of_offset,BLOCK_SIZE);
         size_t blockOffset = file->of_offset - ((blockWriting-1) * BLOCK_SIZE);
         int writingSpace = BLOCK_SIZE-blockOffset;
         size_t toWriteInBlock = writingSpace < to_write ? writingSpace : to_write;
@@ -134,7 +134,6 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
 
         void *block = getNthDataBlock(inode,blockWriting,&errorHandler);
         if (errorHandler){
-            printf("aqui\n");
             return 0;
         }
         if (block == NULL) {
@@ -191,7 +190,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     if (to_read > 0) {
         /* Perform the actual read */
 
-        int blockReading = (int) ceil(file->of_offset / BLOCK_SIZE);
+        int blockReading = divCeil(file->of_offset,BLOCK_SIZE);
         size_t blockOffset = file->of_offset - ((blockReading-1) * BLOCK_SIZE);
         int readingSpace = BLOCK_SIZE-blockOffset;
         size_t toReadInBlock = readingSpace < to_read ? readingSpace : to_read;
