@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 int tfs_init() {
     state_init();
@@ -105,7 +106,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     }
     /* From the open file table entry, we get the inode */
     inode_t *inode = inode_get(file->of_inumber);
-    if (inode == NULL) {
+    if (inode == NULL || (file->of_offset == inode->i_size) && file->of_offset>0) {
         return -1;
     }
 
@@ -115,33 +116,56 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         //to_write = MAX_FILE_SIZE - file->of_offset;
         sizeNeeded = MAX_FILE_SIZE;
     }
-
+    to_write = sizeNeeded - file->of_offset;
+    size_t saveToWrite = to_write;
     if (to_write > 0) {
-        if(allocNecessaryBlocks(inode, sizeNeeded) == -1){
-            return -1;
-        }
-        if (inode->i_size == 0) {
-            /* If empty file, allocate new block */
-            inode->i_data_block = data_block_alloc();
-        }
-
-        void *block = data_block_get(inode->i_data_block);
-        if (block == NULL) {
+        int blocksAlloc;
+        if (allocNecessaryBlocks(inode, sizeNeeded)==-1){
             return -1;
         }
 
         /* Perform the actual write */
-        memcpy(block + file->of_offset, buffer, to_write);
+        // memcpy(block + file->of_offset, buffer, to_write);
+        int blockWriting = (int) ceil(file->of_offset / BLOCK_SIZE);
+        size_t blockOffset = file->of_offset - ((blockWriting-1) * BLOCK_SIZE);
+        int writingSpace = BLOCK_SIZE-blockOffset;
+        size_t toWriteInBlock = writingSpace < to_write ? writingSpace : to_write;
+        char errorHandler;
+
+        void *block = getNthDataBlock(inode,blockWriting,&errorHandler);
+        if (errorHandler){
+            printf("aqui\n");
+            return 0;
+        }
+        if (block == NULL) {
+            return -1;
+        }
+        memcpy(block + blockOffset, buffer, toWriteInBlock);
+        to_write-=toWriteInBlock;
+        while (to_write>0){
+            blockWriting++;
+            toWriteInBlock = BLOCK_SIZE < to_write ? BLOCK_SIZE : to_write;
+            void *block = getNthDataBlock(inode,blockWriting,&errorHandler);
+            if (errorHandler){
+                break;
+            }
+            if (block == NULL) {
+                return -1; //FIX when not enough space;
+            }
+            memcpy(block, buffer, toWriteInBlock);
+            to_write-=toWriteInBlock;
+        }
+
 
         /* The offset associated with the file handle is
          * incremented accordingly */
-        file->of_offset += to_write;
+        file->of_offset += (saveToWrite-to_write);
         if (file->of_offset > inode->i_size) {
             inode->i_size = file->of_offset;
         }
     }
 
-    return (ssize_t)to_write;
+    return (ssize_t) saveToWrite-to_write;
 }
 
 
@@ -162,19 +186,48 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     if (to_read > len) {
         to_read = len;
     }
+    size_t toReadSave = to_read;
 
     if (to_read > 0) {
-        void *block = data_block_get(inode->i_data_block);
+        /* Perform the actual read */
+
+        int blockReading = (int) ceil(file->of_offset / BLOCK_SIZE);
+        size_t blockOffset = file->of_offset - ((blockReading-1) * BLOCK_SIZE);
+        int readingSpace = BLOCK_SIZE-blockOffset;
+        size_t toReadInBlock = readingSpace < to_read ? readingSpace : to_read;
+        int bufferOffset=0;
+        char errorHandler;
+
+        void *block = getNthDataBlock(inode,blockReading,&errorHandler);
+        if (errorHandler){
+            return 0;
+        }
         if (block == NULL) {
             return -1;
         }
+        memcpy(buffer, block + blockOffset, toReadInBlock);
+        to_read-=toReadInBlock;
+        while (to_read>0){
+            blockReading++;
+            bufferOffset += toReadInBlock;
+            toReadInBlock = BLOCK_SIZE < to_read ? BLOCK_SIZE : to_read;
+            void *block = getNthDataBlock(inode,blockReading,&errorHandler);
+            if (errorHandler){
+                //break;
+                return -1;
+            }
+            if (block == NULL) {
+                return -1;
+            }
+            memcpy(buffer, block, toReadInBlock);
+            to_read-=toReadInBlock;
+        }
 
-        /* Perform the actual read */
-        memcpy(buffer, block + file->of_offset, to_read);
+
         /* The offset associated with the file handle is
          * incremented accordingly */
-        file->of_offset += to_read;
+        file->of_offset += (toReadSave-to_read);
     }
 
-    return (ssize_t)to_read;
+    return (ssize_t)(toReadSave-to_read);
 }

@@ -35,6 +35,10 @@ static inline bool valid_file_handle(int file_handle) {
     return file_handle >= 0 && file_handle < MAX_OPEN_FILES;
 }
 
+static inline bool valid_inode_block_number(int nthBlock){
+    return nthBlock >= 1 && nthBlock <= MAX_INODE_BLOCKS;
+}
+
 /**
  * We need to defeat the optimizer for the insert_delay() function.
  * Under optimization, the empty loop would be completely optimized away.
@@ -188,7 +192,7 @@ int deleteInodeDataBlocks(inode_t* inode){
             return -1;
         }
     }
-    j = min(10, j);
+    j = j>10 ? 10 : j;
     for(int i = 0; i < j; i ++){ //TODO insert delay, ver melhor memoria
         if (data_block_free(inode->i_data_block[i]) == -1) {
             return -1;
@@ -301,6 +305,62 @@ int data_block_alloc() {
         }
     }
     return -1;
+}
+
+void* getNthDataBlock(inode_t *inode, int nthBlock, char* errorHandler){
+    *errorHandler = 0;
+    if (nthBlock > getOccupiedBlocks(inode)){
+        if (valid_inode_block_number(nthBlock)){
+            *errorHandler = 1;
+        }
+        return NULL;       
+    }
+    nthBlock--;
+    if (nthBlock>9){
+        int *indirectionBlock = (int*) data_block_get(inode->indirect_data_block);
+        if (indirectionBlock == NULL){
+            return NULL;
+        }
+        nthBlock-=10;
+        return data_block_get(*(indirectionBlock+nthBlock));
+    } else {
+        return data_block_get(inode->i_data_block[nthBlock]);
+    }
+}
+
+int allocNthDataBlock(inode_t *inode, int blockNumber){
+    int b;
+    int *indirectionBlock;
+    if (!valid_inode_block_number(blockNumber)){
+        return -1;
+    }
+    b = data_block_alloc();
+    if (b==-1){
+        return -1;
+    }
+    blockNumber--;
+    if (blockNumber>9){
+        blockNumber-=10;
+        indirectionBlock = (int*) data_block_get(inode->indirect_data_block);
+        if (indirectionBlock==NULL){
+            return -1;
+        }
+        *(indirectionBlock + blockNumber) = b;
+    } else {
+        inode->i_data_block[blockNumber] = b;
+    }
+}
+
+int allocNecessaryBlocks(inode_t* inode, size_t sizeNeeded){
+    int blockOcc = getOccupiedBlocks(inode);
+    int blockNeeded = (int) ceil(sizeNeeded / BLOCK_SIZE);
+    while(blockNeeded > blockOcc){
+        blockOcc++;
+        if (allocNthDataBlock(inode,blockOcc)==-1){
+            return -1;
+        }
+    }
+    return blockOcc;
 }
 
 /* Frees a data block

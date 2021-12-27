@@ -48,6 +48,8 @@ int inode_delete(int inumber);
 int deleteInodeDataBlocks(inode_t* inode);
 inode_t *inode_get(int inumber);
 int freeIndirectBlocks(inode_t *inode, int j);
+void* getNthDataBlock(inode_t *inode, int nthBlock, char* errorHandler);
+int allocNthDataBlock(inode_t *inode, int blockNumber);
 int allocNecessaryBlocks(inode_t* inode, size_t sizeNeeded);
 
 int clear_dir_entry(int inumber, int sub_inumber);

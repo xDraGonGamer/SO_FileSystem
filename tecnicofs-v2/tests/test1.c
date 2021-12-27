@@ -1,4 +1,4 @@
-#include "fs/operations.h"
+#include "../fs/operations.h"
 #include <assert.h>
 #include <string.h>
 
@@ -17,6 +17,7 @@ int main() {
     assert(f != -1);
 
     r = tfs_write(f, str, strlen(str));
+    printf("len=%ld, r=%ld\n",strlen(str),r);
     assert(r == strlen(str));
 
     assert(tfs_close(f) != -1);
