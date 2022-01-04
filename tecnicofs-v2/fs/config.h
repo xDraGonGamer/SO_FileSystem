@@ -12,6 +12,7 @@
 #define DIRECT_BLOCK_COUNT (10)
 #define MAX_FILE_SIZE (2621440) //might be global
 #define MAX_INODE_BLOCKS (266) //might be global
+#define BUFFER_SIZE (256)
 
 #define DELAY (5000)
 

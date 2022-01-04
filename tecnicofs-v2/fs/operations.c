@@ -28,10 +28,6 @@ static bool valid_pathname(char const *name) {
 
 
 int tfs_lookup(char const *name) {
-    if (!valid_pathname(name)) {
-        return -1;
-    }
-
     // skip the initial '/' character
     name++;
     return find_in_dir(ROOT_DIR_INUM, name);
@@ -226,4 +222,38 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     }
 
     return (ssize_t)(toReadSave-to_read);
+}
+
+
+int tfs_copy_to_external_fs(char const *source_path, char const *dest_path){
+    char buffer[BUFFER_SIZE];
+    FILE *destFile;
+    ssize_t bytesRead;
+    /* Checks if the path name is valid */
+    if (!valid_pathname(source_path) || tfs_lookup(source_path)==-1) {
+        return -1; //source does not exist
+    }
+    int fhandle = tfs_open(source_path, TFS_O_CREAT);
+    if (fhandle<0){
+        return -1;
+    }
+    // Maybe some delays
+    destFile = fopen(dest_path, "w");
+    if (destFile == NULL) {
+        tfs_close(fhandle);
+        return -1;
+    }
+    while ((bytesRead=tfs_read(fhandle,buffer,BUFFER_SIZE))>0){
+        if (bytesRead<BUFFER_SIZE){
+            buffer[bytesRead] = '\0';
+        }
+        fprintf(destFile,buffer);
+    }
+    if (bytesRead<0){
+        return -1;
+    }
+
+    fclose(destFile);
+    tfs_close(fhandle);
+    return 0;
 }
