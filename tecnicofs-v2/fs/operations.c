@@ -34,7 +34,6 @@ int tfs_lookup(char const *name) {
 
     // skip the initial '/' character
     name++;
-
     return find_in_dir(ROOT_DIR_INUM, name);
 }
 
@@ -46,7 +45,6 @@ int tfs_open(char const *name, int flags) {
     if (!valid_pathname(name)) {
         return -1;
     }
-
     inum = tfs_lookup(name); //gets the inumber
     if (inum >= 0) {
         /* The file already exists */
@@ -106,10 +104,9 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     }
     /* From the open file table entry, we get the inode */
     inode_t *inode = inode_get(file->of_inumber);
-    if (inode == NULL || (file->of_offset == inode->i_size) && file->of_offset>0) {
+    if (inode == NULL) {
         return -1;
     }
-
     /* Determine how many bytes to write */
     size_t sizeNeeded = to_write + file->of_offset;
     if (sizeNeeded > MAX_FILE_SIZE) {
@@ -132,6 +129,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         size_t toWriteInBlock = writingSpace < to_write ? writingSpace : to_write;
         char errorHandler;
 
+        
         void *block = getNthDataBlock(inode,blockWriting,&errorHandler);
         if (errorHandler){
             return 0;
@@ -163,7 +161,6 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
             inode->i_size = file->of_offset;
         }
     }
-
     return (ssize_t) saveToWrite-to_write;
 }
 

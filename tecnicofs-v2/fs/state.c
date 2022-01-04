@@ -188,6 +188,10 @@ int freeIndirectBlocks(inode_t *inode, int j){
             return -1;
         }
     }
+    /* Free Block with IndBlocks*/
+    if (data_block_free(inode->indirect_data_block) == -1) {
+        return -1;
+    }
     return 0;
 }
 
@@ -256,7 +260,7 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
         if (dir_entry[i].d_inumber == -1) {
             dir_entry[i].d_inumber = sub_inumber;
             strncpy(dir_entry[i].d_name, sub_name, MAX_FILE_NAME - 1);
-            dir_entry[i].d_name[MAX_FILE_NAME - 1] = 0;
+            dir_entry[i].d_name[MAX_FILE_NAME - 1] = '\0';
             return 0;
         }
     }
@@ -286,12 +290,12 @@ int find_in_dir(int inumber, char const *sub_name) {
 
     /* Iterates over the directory entries looking for one that has the target
      * name */
-    for (int i = 0; i < MAX_DIR_ENTRIES; i++)
+    for (int i = 0; i < MAX_DIR_ENTRIES; i++){     
         if ((dir_entry[i].d_inumber != -1) &&
             (strncmp(dir_entry[i].d_name, sub_name, MAX_FILE_NAME) == 0)) {
             return dir_entry[i].d_inumber;
         }
-
+    }
     return -1;
 }
 
@@ -346,6 +350,13 @@ int allocNthDataBlock(inode_t *inode, int blockNumber){
     }
     blockNumber--;
     if (blockNumber>9){
+        if (blockNumber==10){ //alloc IndBlock
+            inode->indirect_data_block = b;
+            b = data_block_alloc();
+            if (b==-1){
+                return -1;
+            }
+        }
         blockNumber-=10;
         indirectionBlock = (int*) data_block_get(inode->indirect_data_block);
         if (indirectionBlock==NULL){
