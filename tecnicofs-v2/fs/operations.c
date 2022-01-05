@@ -36,6 +36,7 @@ int tfs_lookup(char const *name) {
 int tfs_open(char const *name, int flags) {
     int inum;
     size_t offset;
+    char isAppending = 0;
 
     /* Checks if the path name is valid */
     if (!valid_pathname(name)) {
@@ -61,6 +62,7 @@ int tfs_open(char const *name, int flags) {
         /* Determine initial offset */
         if (flags & TFS_O_APPEND) {
             offset = inode->i_size;
+            isAppending = 1;
         } else {
             offset = 0;
         }
@@ -83,7 +85,7 @@ int tfs_open(char const *name, int flags) {
 
     /* Finally, add entry to the open file table and
      * return the corresponding handle */
-    return add_to_open_file_table(inum, offset);
+    return add_to_open_file_table(inum, offset, isAppending);
 
     /* Note: for simplification, if file was created with TFS_O_CREAT and there
      * is an error adding an entry to the open file table, the file is not
@@ -103,17 +105,23 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     if (inode == NULL) {
         return -1;
     }
+    pthread_rwlock_wrlock(&inode->rwlock); //critical zone ahead where writing occurs
+    if(file->isAppending){
+        file->of_offset = inode->i_size; // if the file truncates after opening for appending
+    }
     /* Determine how many bytes to write */
     size_t sizeNeeded = to_write + file->of_offset;
     if (sizeNeeded > MAX_FILE_SIZE) {
         //to_write = MAX_FILE_SIZE - file->of_offset;
         sizeNeeded = MAX_FILE_SIZE;
     }
+
     to_write = sizeNeeded - file->of_offset;
     size_t saveToWrite = to_write;
     if (to_write > 0) {
         int blocksAlloc;
         if (allocNecessaryBlocks(inode, sizeNeeded)==-1){
+            pthread_rwlock_wrunlock(&inode->rwlock);
             return -1;
         }
 
@@ -128,9 +136,11 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         
         void *block = getNthDataBlock(inode,blockWriting,&errorHandler);
         if (errorHandler){
+            pthread_rwlock_wrunlock(&inode->rwlock);
             return 0;
         }
         if (block == NULL) {
+            pthread_rwlock_wrunlock(&inode->rwlock);
             return -1;
         }
         memcpy(block + blockOffset, buffer, toWriteInBlock);
@@ -143,6 +153,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                 break;
             }
             if (block == NULL) {
+                pthread_rwlock_wrunlock(&inode->rwlock);
                 return -1; //FIX when not enough space;
             }
             memcpy(block, buffer, toWriteInBlock);
@@ -157,6 +168,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
             inode->i_size = file->of_offset;
         }
     }
+    pthread_rwlock_wrunlock(&inode->rwlock);
     return (ssize_t) saveToWrite-to_write;
 }
 
@@ -173,12 +185,19 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         return -1;
     }
 
+    if(file->isAppending){ //if reading a file appending, doesnt read
+        return 0;
+    }
+    pthread_rwlock_rdlock(&inode->rwlock); //critical zone ahead where reading occurs
+
     /* Determine how many bytes to read */
     size_t to_read = inode->i_size - file->of_offset;
     if (to_read > len) {
         to_read = len;
     }
+    
     size_t toReadSave = to_read;
+    
 
     if (to_read > 0) {
         /* Perform the actual read */
@@ -192,9 +211,11 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
         void *block = getNthDataBlock(inode,blockReading,&errorHandler);
         if (errorHandler){
+            pthread_rwlock_rdunlock(&inode->rwlock);
             return 0;
         }
         if (block == NULL) {
+            pthread_rwlock_rdunlock(&inode->rwlock);
             return -1;
         }
         memcpy(buffer, block + blockOffset, toReadInBlock);
@@ -206,9 +227,11 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
             void *block = getNthDataBlock(inode,blockReading,&errorHandler);
             if (errorHandler){
                 //break;
+                pthread_rwlock_rdunlock(&inode->rwlock);
                 return -1;
             }
             if (block == NULL) {
+                pthread_rwlock_rdunlock(&inode->rwlock);
                 return -1;
             }
             memcpy(buffer, block, toReadInBlock);
@@ -220,7 +243,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
          * incremented accordingly */
         file->of_offset += (toReadSave-to_read);
     }
-
+    pthread_rwlock_rdunlock(&inode->rwlock);
     return (ssize_t)(toReadSave-to_read);
 }
 

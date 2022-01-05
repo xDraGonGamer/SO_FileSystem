@@ -17,6 +17,9 @@ static char freeinode_ts[INODE_TABLE_SIZE];
 static char fs_data[BLOCK_SIZE * DATA_BLOCKS];
 static char free_blocks[DATA_BLOCKS];
 
+/* RWLocks table */
+static pthread_rwlock_t block_locks[DATA_BLOCKS];
+
 /* Volatile FS state */
 
 static open_file_entry_t open_file_table[MAX_OPEN_FILES];
@@ -144,6 +147,7 @@ int inode_create(inode_type n_type) {
                 inode_table[inumber].i_size = 0;
                 inode_table[inumber].blocksAlloc = 0;
             }
+            
             return inumber;
         }
     }
@@ -417,12 +421,13 @@ void *data_block_get(int block_number) {
  * 	- Initial offset
  * Returns: file handle if successful, -1 otherwise
  */
-int add_to_open_file_table(int inumber, size_t offset) {
+int add_to_open_file_table(int inumber, size_t offset, char isAppending) {
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
         if (free_open_file_entries[i] == FREE) {
             free_open_file_entries[i] = TAKEN;
             open_file_table[i].of_inumber = inumber;
             open_file_table[i].of_offset = offset;
+            open_file_table[i].isAppending = isAppending;
             return i;
         }
     }
