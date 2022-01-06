@@ -25,7 +25,7 @@ typedef struct {
     size_t i_size;
     int i_data_block[10];
     int indirect_data_block;
-    short blocksAlloc;
+    size_t blocksAlloc;
     pthread_rwlock_t rwlock;
     /* in a real FS, more fields would exist here */
 } inode_t;
@@ -43,7 +43,7 @@ typedef struct {
 
 #define MAX_DIR_ENTRIES (BLOCK_SIZE / sizeof(dir_entry_t))
 
-int divCeil(int i1,int i2);
+size_t divCeil(size_t i1,unsigned int i2);
 
 void state_init();
 void state_destroy();
@@ -52,10 +52,10 @@ int inode_create(inode_type n_type);
 int inode_delete(int inumber);
 int deleteInodeDataBlocks(inode_t* inode);
 inode_t *inode_get(int inumber);
-int freeIndirectBlocks(inode_t *inode, int j);
-void* getNthDataBlock(inode_t *inode, int nthBlock, char* errorHandler);
-int allocNthDataBlock(inode_t *inode, int blockNumber);
-int allocNecessaryBlocks(inode_t* inode, size_t sizeNeeded);
+int freeIndirectBlocks(inode_t *inode, size_t j);
+void* getNthDataBlock(inode_t *inode, size_t nthBlock, char* errorHandler);
+int allocNthDataBlock(inode_t *inode, size_t blockNumber);
+char allocNecessaryBlocks(inode_t* inode, size_t sizeNeeded);
 
 int clear_dir_entry(int inumber, int sub_inumber);
 int add_dir_entry(int inumber, int sub_inumber, char const *sub_name);

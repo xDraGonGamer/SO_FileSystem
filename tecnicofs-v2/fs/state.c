@@ -17,9 +17,6 @@ static char freeinode_ts[INODE_TABLE_SIZE];
 static char fs_data[BLOCK_SIZE * DATA_BLOCKS];
 static char free_blocks[DATA_BLOCKS];
 
-/* RWLocks table */
-static pthread_rwlock_t block_locks[DATA_BLOCKS];
-
 /* Volatile FS state */
 
 static open_file_entry_t open_file_table[MAX_OPEN_FILES];
@@ -37,7 +34,7 @@ static inline bool valid_file_handle(int file_handle) {
     return file_handle >= 0 && file_handle < MAX_OPEN_FILES;
 }
 
-static inline bool valid_inode_block_number(int nthBlock){
+static inline bool valid_inode_block_number(size_t nthBlock){
     return nthBlock >= 1 && nthBlock <= MAX_INODE_BLOCKS;
 }
 
@@ -69,8 +66,8 @@ static void insert_delay() {
 }
 
 
-int divCeil(int i1, int i2){
-    int out = i1 / i2;
+size_t divCeil(size_t i1, unsigned int i2){
+    size_t out = i1 / i2;
     return !(i1 % i2) ? out : out+1;
 }
 
@@ -89,12 +86,6 @@ void state_init() {
     for (size_t i = 0; i < MAX_OPEN_FILES; i++) {
         free_open_file_entries[i] = FREE;
     }
-}
-
-int getNonEmptyBlocks(inode_t *inode){ //returns number of blocks with data in them
-
-    return divCeil(inode->i_size,BLOCK_SIZE);
-
 }
 
 void state_destroy() { /* nothing to do */
@@ -162,7 +153,6 @@ int inode_create(inode_type n_type) {
  */
 int inode_delete(int inumber) {
     // simulate storage access delay (to i-node and freeinode_ts)
-    int j, i;
     insert_delay();
     insert_delay();
 
@@ -181,7 +171,7 @@ int inode_delete(int inumber) {
 }
 
 
-int freeIndirectBlocks(inode_t *inode, int j){
+int freeIndirectBlocks(inode_t *inode, size_t j){
     int i, *indirectionBlock = (int*)data_block_get(inode->indirect_data_block);
     if(indirectionBlock == NULL){
         return -1;
@@ -200,7 +190,7 @@ int freeIndirectBlocks(inode_t *inode, int j){
 }
 
 int deleteInodeDataBlocks(inode_t* inode){
-    int j = inode->blocksAlloc;
+    size_t j = inode->blocksAlloc;
     if(j > 10){
         if(freeIndirectBlocks(inode, j) == -1){
             return -1;
@@ -321,7 +311,7 @@ int data_block_alloc() {
     return -1;
 }
 
-void* getNthDataBlock(inode_t *inode, int nthBlock, char* errorHandler){
+void* getNthDataBlock(inode_t *inode, size_t nthBlock, char* errorHandler){
     *errorHandler = 0;
     if (nthBlock > inode->blocksAlloc){
         if (valid_inode_block_number(nthBlock)){
@@ -342,7 +332,7 @@ void* getNthDataBlock(inode_t *inode, int nthBlock, char* errorHandler){
     }
 }
 
-int allocNthDataBlock(inode_t *inode, int blockNumber){
+int allocNthDataBlock(inode_t *inode, size_t blockNumber){
     int b;
     int *indirectionBlock;
     if (!valid_inode_block_number(blockNumber)){
@@ -374,16 +364,16 @@ int allocNthDataBlock(inode_t *inode, int blockNumber){
     return 0;
 }
 
-int allocNecessaryBlocks(inode_t* inode, size_t sizeNeeded){
-    int blockOcc = inode->blocksAlloc;
-    int blockNeeded = divCeil(sizeNeeded,BLOCK_SIZE);
+char allocNecessaryBlocks(inode_t* inode, size_t sizeNeeded){
+    size_t blockOcc = inode->blocksAlloc;
+    size_t blockNeeded = divCeil(sizeNeeded,BLOCK_SIZE);
     while(blockNeeded > blockOcc){
         blockOcc++;
         if (allocNthDataBlock(inode,blockOcc)==-1){
             return -1;
         }
     }
-    return blockOcc;
+    return 0;
 }
 
 /* Frees a data block

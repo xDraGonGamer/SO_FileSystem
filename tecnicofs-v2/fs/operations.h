@@ -11,6 +11,8 @@ enum {
     TFS_O_APPEND = 0b100,
 };
 
+pthread_mutex_t newFileMutex;
+
 /*
  * Initializes tecnicofs
  * Returns 0 if successful, -1 otherwise.
@@ -49,6 +51,8 @@ int tfs_lookup(char const *name);
  *    - create file if it does not exist (TFS_O_CREAT)
  */
 int tfs_open(char const *name, int flags);
+
+int tfs_open_existing_file(int flags, int inum, char* isAppending, size_t* offset);
 
 /* Closes a file
  * Input:
