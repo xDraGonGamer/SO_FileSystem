@@ -52,7 +52,7 @@ int tfs_lookup(char const *name);
  */
 int tfs_open(char const *name, int flags);
 
-int tfs_open_existing_file(int flags, int inum, char* isAppending, size_t* offset);
+char open_existing_file(int flags, int inum, char* isAppending, size_t* offset);
 
 /* Closes a file
  * Input:

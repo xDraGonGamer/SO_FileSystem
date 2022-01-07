@@ -1,11 +1,11 @@
 #include "operations.h"
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <math.h>
 
 int tfs_init() {
     state_init();
@@ -35,14 +35,14 @@ int tfs_lookup(char const *name) {
     return find_in_dir(ROOT_DIR_INUM, name);
 }
 
-int tfs_open_existing_file(int flags, int inum, char* isAppending, size_t* offset){
+char open_existing_file(int flags, int inum, char* isAppending, size_t* offset){
     /* The file already exists */
     inode_t *inode = inode_get(inum); //gets the inode
     if (inode == NULL) {
         return -1;
     }
 
-    /* Trucate (if requested) */
+    /* Truncate (if requested) */
     if (flags & TFS_O_TRUNC) {
         pthread_rwlock_wrlock(&inode->rwlock);
         if (inode->i_size > 0) {
@@ -75,7 +75,7 @@ int tfs_open(char const *name, int flags) {
     }
     inum = tfs_lookup(name); //gets the inumber
     if (inum >= 0) {
-        if (tfs_open_existing_file(flags,inum,&isAppending,&offset)==-1){
+        if (open_existing_file(flags,inum,&isAppending,&offset)==-1){
             return -1;
         }
     } else if (flags & TFS_O_CREAT) {
@@ -84,7 +84,7 @@ int tfs_open(char const *name, int flags) {
         inum = tfs_lookup(name);
         if (inum >= 0){
             pthread_mutex_unlock(&newFileMutex);
-            if (tfs_open_existing_file(flags,inum,&isAppending,&offset)==-1){
+            if (open_existing_file(flags,inum,&isAppending,&offset)==-1){
                 return -1;
             }
             return add_to_open_file_table(inum, offset, isAppending);
@@ -120,13 +120,6 @@ int tfs_open(char const *name, int flags) {
 
 int tfs_close(int fhandle) { return remove_from_open_file_table(fhandle); }
 
-// TO Defeat Cast Warning
-ssize_t joao(size_t s1, size_t s2){ 
-    ssize_t out;
-    s1-=s2;
-    for (out=0;out!=s1;out++) { }
-    return out;
-}
 
 ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     open_file_entry_t *file = get_open_file_entry(fhandle);
@@ -159,39 +152,27 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
 
         /* Perform the actual write */
         // memcpy(block + file->of_offset, buffer, to_write);
-        size_t blockWriting = !file->of_offset ? 1 : divCeil(file->of_offset,BLOCK_SIZE);
-        size_t blockOffset = file->of_offset - ((blockWriting-1) * BLOCK_SIZE);
-        size_t writingSpace = BLOCK_SIZE-blockOffset;
+        size_t blockWriting = !file->of_offset ? 1 : divCeil(file->of_offset,BLOCK_SIZE); //which block to start writing in
+        size_t blockOffset = file->of_offset - ((blockWriting-1) * BLOCK_SIZE); //offset to start writing in block if it has data already
+        size_t writingSpace = BLOCK_SIZE-blockOffset; //space left in block to write
         size_t toWriteInBlock = writingSpace < to_write ? writingSpace : to_write;
         char errorHandler;
-
-        //TODO possible to merge this code adding char firstRun;
-        void *block = getNthDataBlock(inode,blockWriting,&errorHandler);
-        if (errorHandler){
-            pthread_rwlock_unlock(&inode->rwlock);
-            return 0;
-        }
-        if (block == NULL) {
-            pthread_rwlock_unlock(&inode->rwlock);
-            return -1;
-        }
-        memcpy(block + blockOffset, buffer, toWriteInBlock);
-        to_write-=toWriteInBlock;
+        void *block;
         while (to_write>0){
-            blockWriting++;
-            toWriteInBlock = BLOCK_SIZE < to_write ? BLOCK_SIZE : to_write;
             block = getNthDataBlock(inode,blockWriting,&errorHandler);
             if (errorHandler){
                 break;
             }
             if (block == NULL) {
                 pthread_rwlock_unlock(&inode->rwlock);
-                return -1; //FIX when not enough space;
+                return -1;
             }
-            memcpy(block, buffer, toWriteInBlock);
+            memcpy(block + blockOffset, buffer, toWriteInBlock);
+            blockOffset = 0;
             to_write-=toWriteInBlock;
+            blockWriting++;
+            toWriteInBlock = BLOCK_SIZE < to_write ? BLOCK_SIZE : to_write;
         }
-
 
         /* The offset associated with the file handle is
          * incremented accordingly */
@@ -230,7 +211,6 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     }
     
     size_t toReadSave = to_read;
-    
 
     if (to_read > 0) {
         /* Perform the actual read */
@@ -239,27 +219,12 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         size_t blockOffset = file->of_offset - ((blockReading-1) * BLOCK_SIZE);
         size_t readingSpace = BLOCK_SIZE-blockOffset;
         size_t toReadInBlock = readingSpace < to_read ? readingSpace : to_read;
-        size_t bufferOffset=0;
         char errorHandler;
+        void* block;
 
-        void *block = getNthDataBlock(inode,blockReading,&errorHandler);
-        if (errorHandler){
-            pthread_rwlock_unlock(&inode->rwlock);
-            return 0;
-        }
-        if (block == NULL) {
-            pthread_rwlock_unlock(&inode->rwlock);
-            return -1;
-        }
-        memcpy(buffer, block + blockOffset, toReadInBlock);
-        to_read-=toReadInBlock;
         while (to_read>0){
-            blockReading++;
-            bufferOffset += toReadInBlock;
-            toReadInBlock = BLOCK_SIZE < to_read ? BLOCK_SIZE : to_read;
             block = getNthDataBlock(inode,blockReading,&errorHandler);
             if (errorHandler){
-                //break;
                 pthread_rwlock_unlock(&inode->rwlock);
                 return -1;
             }
@@ -267,10 +232,12 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
                 pthread_rwlock_unlock(&inode->rwlock);
                 return -1;
             }
-            memcpy(buffer, block, toReadInBlock);
+            memcpy(buffer, block + blockOffset, toReadInBlock);
             to_read-=toReadInBlock;
+            toReadInBlock = BLOCK_SIZE < to_read ? BLOCK_SIZE : to_read;
+            blockOffset = 0;
+            blockReading++;
         }
-
 
         /* The offset associated with the file handle is
          * incremented accordingly */
@@ -293,7 +260,6 @@ int tfs_copy_to_external_fs(char const *source_path, char const *dest_path){
     if (fhandle<0){
         return -1;
     }
-    // Maybe some delays
     destFile = fopen(dest_path, "w");
     if (destFile == NULL) {
         tfs_close(fhandle);

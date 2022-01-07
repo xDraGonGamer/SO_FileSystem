@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 
 /* Persistent FS state  (in reality, it should be maintained in secondary
  * memory; for simplicity, this project maintains it in primary memory) */
@@ -75,6 +76,7 @@ size_t divCeil(size_t i1, unsigned int i2){
  * Initializes FS state
  */
 void state_init() {
+    pthread_mutex_init(&addFileEntryMutex, NULL);
     for (size_t i = 0; i < INODE_TABLE_SIZE; i++) {
         freeinode_ts[i] = FREE;
     }
@@ -138,7 +140,7 @@ int inode_create(inode_type n_type) {
                 inode_table[inumber].i_size = 0;
                 inode_table[inumber].blocksAlloc = 0;
             }
-            
+            pthread_rwlock_init(&(inode_table[inumber].rwlock), NULL);
             return inumber;
         }
     }
@@ -151,7 +153,7 @@ int inode_create(inode_type n_type) {
  *  - inumber: i-node's number
  * Returns: 0 if successful, -1 if failed
  */
-int inode_delete(int inumber) {
+char inode_delete(int inumber) {
     // simulate storage access delay (to i-node and freeinode_ts)
     insert_delay();
     insert_delay();
@@ -161,22 +163,24 @@ int inode_delete(int inumber) {
     }
 
     freeinode_ts[inumber] = FREE;
-    if (inode_table[inumber].i_size > 0) { //TODO insert delay 
+    if (inode_table[inumber].i_size > 0) {
         if(deleteInodeDataBlocks(&inode_table[inumber]) == -1){
             return -1;
         }
     }
+    pthread_rwlock_destroy(&(inode_table[inumber].rwlock));
 
     return 0;
 }
 
 
-int freeIndirectBlocks(inode_t *inode, size_t j){
+char freeIndirectBlocks(inode_t *inode, size_t j){
     int i, *indirectionBlock = (int*)data_block_get(inode->indirect_data_block);
     if(indirectionBlock == NULL){
         return -1;
     }
     j -= 10;
+    // Free indirect blocks
     for(i = 0; i < j; i++){
         if (data_block_free(*(indirectionBlock + i)) == -1) {
             return -1;
@@ -189,15 +193,15 @@ int freeIndirectBlocks(inode_t *inode, size_t j){
     return 0;
 }
 
-int deleteInodeDataBlocks(inode_t* inode){
+char deleteInodeDataBlocks(inode_t* inode){
     size_t j = inode->blocksAlloc;
-    if(j > 10){
+    if(j > 10){ // If the inode has allocated indirect blocks, deletes them
         if(freeIndirectBlocks(inode, j) == -1){
             return -1;
         }
+        j = 10; //Only remains 10 blocks (direct) to be deleted
     }
-    j = j>10 ? 10 : j;
-    for(int i = 0; i < j; i ++){ //TODO insert delay, ver melhor memoria
+    for(int i = 0; i < j; i ++){
         if (data_block_free(inode->i_data_block[i]) == -1) {
             return -1;
         }
@@ -228,7 +232,7 @@ inode_t *inode_get(int inumber) {
  *  - sub_name: name of the sub i-node entry
  * Returns: SUCCESS or FAIL
  */
-int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
+char add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
     if (!valid_inumber(inumber) || !valid_inumber(sub_inumber)) {
         return -1;
     }
@@ -244,7 +248,7 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
 
     /* Locates the block containing the directory's entries */
     dir_entry_t *dir_entry =
-        (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block[0]);
+        (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block[0]); // root is the only directory and only has 1 block
     if (dir_entry == NULL) {
         return -1;
     }
@@ -302,7 +306,7 @@ int data_block_alloc() {
         if (i * (int) sizeof(allocation_state_t) % BLOCK_SIZE == 0) {
             insert_delay(); // simulate storage access delay to free_blocks
         }
-        //      lock
+        // No need to add a lock since this function is only called on tfs_write which already has a lock
         if (free_blocks[i] == FREE) {
             free_blocks[i] = TAKEN; 
             return i;
@@ -320,7 +324,7 @@ void* getNthDataBlock(inode_t *inode, size_t nthBlock, char* errorHandler){
         return NULL;       
     }
     nthBlock--;
-    if (nthBlock>9){
+    if (nthBlock>9){ //if we want an indirect block
         int *indirectionBlock = (int*) data_block_get(inode->indirect_data_block);
         if (indirectionBlock == NULL){
             return NULL;
@@ -332,7 +336,7 @@ void* getNthDataBlock(inode_t *inode, size_t nthBlock, char* errorHandler){
     }
 }
 
-int allocNthDataBlock(inode_t *inode, size_t blockNumber){
+char allocNthDataBlock(inode_t *inode, size_t blockNumber){
     int b;
     int *indirectionBlock;
     if (!valid_inode_block_number(blockNumber)){
@@ -340,7 +344,7 @@ int allocNthDataBlock(inode_t *inode, size_t blockNumber){
     }
     b = data_block_alloc();
     if (b==-1){
-        return -1;
+        return 0; // cant find more blocks but getNthDataBlock handles this
     }
     blockNumber--;
     if (blockNumber>9){
@@ -348,7 +352,7 @@ int allocNthDataBlock(inode_t *inode, size_t blockNumber){
             inode->indirect_data_block = b;
             b = data_block_alloc();
             if (b==-1){
-                return -1;
+                return 0; // cant find more blocks but getNthDataBlock handles this
             }
         }
         blockNumber-=10;
@@ -381,7 +385,7 @@ char allocNecessaryBlocks(inode_t* inode, size_t sizeNeeded){
  * 	- the block index
  * Returns: 0 if success, -1 otherwise
  */
-int data_block_free(int block_number) {
+char data_block_free(int block_number) {
     if (!valid_block_number(block_number)) {
         return -1;
     }
@@ -413,13 +417,16 @@ void *data_block_get(int block_number) {
  */
 int add_to_open_file_table(int inumber, size_t offset, char isAppending) {
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
+        pthread_mutex_lock(&addFileEntryMutex);
         if (free_open_file_entries[i] == FREE) {
             free_open_file_entries[i] = TAKEN;
+            pthread_mutex_unlock(&addFileEntryMutex);
             open_file_table[i].of_inumber = inumber;
             open_file_table[i].of_offset = offset;
             open_file_table[i].isAppending = isAppending;
             return i;
         }
+        pthread_mutex_unlock(&addFileEntryMutex);
     }
     return -1;
 }
@@ -429,7 +436,7 @@ int add_to_open_file_table(int inumber, size_t offset, char isAppending) {
  * 	- file handle to free/close
  * Returns 0 is success, -1 otherwise
  */
-int remove_from_open_file_table(int fhandle) {
+char remove_from_open_file_table(int fhandle) {
     if (!valid_file_handle(fhandle) ||
         free_open_file_entries[fhandle] != TAKEN) {
         return -1;

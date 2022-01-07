@@ -43,30 +43,32 @@ typedef struct {
 
 #define MAX_DIR_ENTRIES (BLOCK_SIZE / sizeof(dir_entry_t))
 
+pthread_mutex_t addFileEntryMutex;
+
 size_t divCeil(size_t i1,unsigned int i2);
 
 void state_init();
 void state_destroy();
 
 int inode_create(inode_type n_type);
-int inode_delete(int inumber);
-int deleteInodeDataBlocks(inode_t* inode);
+char inode_delete(int inumber);
+char deleteInodeDataBlocks(inode_t* inode);
 inode_t *inode_get(int inumber);
-int freeIndirectBlocks(inode_t *inode, size_t j);
+char freeIndirectBlocks(inode_t *inode, size_t j);
 void* getNthDataBlock(inode_t *inode, size_t nthBlock, char* errorHandler);
-int allocNthDataBlock(inode_t *inode, size_t blockNumber);
+char allocNthDataBlock(inode_t *inode, size_t blockNumber);
 char allocNecessaryBlocks(inode_t* inode, size_t sizeNeeded);
 
 int clear_dir_entry(int inumber, int sub_inumber);
-int add_dir_entry(int inumber, int sub_inumber, char const *sub_name);
+char add_dir_entry(int inumber, int sub_inumber, char const *sub_name);
 int find_in_dir(int inumber, char const *sub_name);
 
 int data_block_alloc();
-int data_block_free(int block_number);
+char data_block_free(int block_number);
 void *data_block_get(int block_number);
 
 int add_to_open_file_table(int inumber, size_t offset, char isAppending);
-int remove_from_open_file_table(int fhandle);
+char remove_from_open_file_table(int fhandle);
 open_file_entry_t *get_open_file_entry(int fhandle);
 
 #endif // STATE_H
