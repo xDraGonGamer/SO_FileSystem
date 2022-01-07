@@ -202,7 +202,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         }
     }
     pthread_rwlock_unlock(&inode->rwlock);
-    return joao(saveToWrite,to_write);
+    return (ssize_t) (saveToWrite-to_write);
 }
 
 
