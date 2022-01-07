@@ -7,7 +7,7 @@ CC ?= gcc
 LD ?= gcc
 
 # space separated list of directories with header files
-INCLUDE_DIRS := fs .
+INCLUDE_DIRS := ../../../fs .
 # this creates a space separated list of -I<dir> where <dir> is each of the values in INCLUDE_DIRS
 INCLUDES = $(addprefix -I, $(INCLUDE_DIRS))
 
@@ -23,6 +23,7 @@ vpath %.h $(INCLUDE_DIRS)
 
 CFLAGS = -std=c11 -D_POSIX_C_SOURCE=200809L
 CFLAGS += $(INCLUDES)
+LDFLAGS = -pthread
 
 # Warnings
 CFLAGS += -fdiagnostics-color=always -Wall -Werror -Wextra -Wcast-align -Wconversion -Wfloat-equal -Wformat=2 -Wnull-dereference -Wshadow -Wsign-conversion -Wswitch-default -Wswitch-enum -Wundef -Wunreachable-code -Wunused
@@ -64,12 +65,12 @@ fmt: $(SOURCES) $(HEADERS)
 # Note the lack of a rule.
 # make uses a set of default rules, one of which compiles C binaries
 # the CC, LD, CFLAGS and LDFLAGS are used in this rule
-tests/test1: tests/test1.o fs/operations.o fs/state.o
-tests/copy_to_external_errors: tests/copy_to_external_errors.o fs/operations.o fs/state.o
-tests/copy_to_external_simple: tests/copy_to_external_simple.o fs/operations.o fs/state.o
-tests/write_10_blocks_spill: tests/write_10_blocks_spill.o fs/operations.o fs/state.o
-tests/write_10_blocks_simple: tests/write_10_blocks_simple.o fs/operations.o fs/state.o
-tests/write_more_than_10_blocks_simple: tests/write_more_than_10_blocks_simple.o fs/operations.o fs/state.o
+tests/test1: tests/test1.o ../../../fs/operations.o ../../../fs/state.o
+tests/copy_to_external_errors: tests/copy_to_external_errors.o ../../../fs/operations.o ../../../fs/state.o
+tests/copy_to_external_simple: tests/copy_to_external_simple.o ../../../fs/operations.o ../../../fs/state.o
+tests/write_10_blocks_spill: tests/write_10_blocks_spill.o ../../../fs/operations.o ../../../fs/state.o
+tests/write_10_blocks_simple: tests/write_10_blocks_simple.o ../../../fs/operations.o ../../../fs/state.o
+tests/write_more_than_10_blocks_simple: tests/write_more_than_10_blocks_simple.o ../../../fs/operations.o ../../../fs/state.o
 
 
 clean:

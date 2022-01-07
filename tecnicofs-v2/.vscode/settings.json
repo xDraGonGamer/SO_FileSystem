@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "pthread.h": "c"
+        "pthread.h": "c",
+        "operations.h": "c"
     }
 }

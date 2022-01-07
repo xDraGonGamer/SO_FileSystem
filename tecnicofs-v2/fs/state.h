@@ -46,6 +46,7 @@ typedef struct {
 pthread_mutex_t addFileEntryMutex;
 
 size_t divCeil(size_t i1,unsigned int i2);
+size_t divCeilRW(size_t i1,unsigned int i2);
 
 void state_init();
 void state_destroy();

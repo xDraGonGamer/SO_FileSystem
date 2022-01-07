@@ -1,7 +1,4 @@
 #include "../../../../fs/operations.h"
-#include "../../../../fs/operations.c"
-#include "../../../../fs/state.h"
-#include "../../../../fs/state.c"
 #include <assert.h>
 #include <string.h>
 
@@ -41,9 +38,9 @@ int main() {
     /* Open again to check if contents are as expected */
     fd = tfs_open(path, 0);
     assert(fd != -1 );
-
     for (int i = 0; i < COUNT; i++) {
-        assert(tfs_read(fd, output, SIZE) == SIZE);
+        ssize_t bostarde = tfs_read(fd, output, SIZE);
+        assert(bostarde == SIZE);
         assert (memcmp(input, output, SIZE) == 0);
     }
 

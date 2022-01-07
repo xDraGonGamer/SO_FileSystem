@@ -152,7 +152,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
 
         /* Perform the actual write */
         // memcpy(block + file->of_offset, buffer, to_write);
-        size_t blockWriting = !file->of_offset ? 1 : divCeil(file->of_offset,BLOCK_SIZE); //which block to start writing in
+        size_t blockWriting = divCeilRW(file->of_offset,BLOCK_SIZE); //which block to start writing in
         size_t blockOffset = file->of_offset - ((blockWriting-1) * BLOCK_SIZE); //offset to start writing in block if it has data already
         size_t writingSpace = BLOCK_SIZE-blockOffset; //space left in block to write
         size_t toWriteInBlock = writingSpace < to_write ? writingSpace : to_write;
@@ -214,8 +214,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
     if (to_read > 0) {
         /* Perform the actual read */
-
-        size_t blockReading = divCeil(file->of_offset,BLOCK_SIZE);
+        size_t blockReading = divCeilRW(file->of_offset,BLOCK_SIZE);
         size_t blockOffset = file->of_offset - ((blockReading-1) * BLOCK_SIZE);
         size_t readingSpace = BLOCK_SIZE-blockOffset;
         size_t toReadInBlock = readingSpace < to_read ? readingSpace : to_read;

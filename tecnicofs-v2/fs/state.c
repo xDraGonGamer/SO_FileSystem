@@ -72,6 +72,10 @@ size_t divCeil(size_t i1, unsigned int i2){
     return !(i1 % i2) ? out : out+1;
 }
 
+size_t divCeilRW(size_t i1, unsigned int i2){
+    return (i1 / i2) + 1;
+}
+
 /*
  * Initializes FS state
  */
