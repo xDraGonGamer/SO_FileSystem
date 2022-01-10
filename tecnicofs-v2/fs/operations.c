@@ -156,6 +156,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         size_t blockOffset = file->of_offset - ((blockWriting-1) * BLOCK_SIZE); //offset to start writing in block if it has data already
         size_t writingSpace = BLOCK_SIZE-blockOffset; //space left in block to write
         size_t toWriteInBlock = writingSpace < to_write ? writingSpace : to_write;
+        size_t bufferOffset = 0;
         char errorHandler;
         void *block;
         while (to_write>0){
@@ -167,7 +168,8 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                 pthread_rwlock_unlock(&inode->rwlock);
                 return -1;
             }
-            memcpy(block + blockOffset, buffer, toWriteInBlock);
+            memcpy(block + blockOffset, buffer + bufferOffset, toWriteInBlock);
+            bufferOffset+=toWriteInBlock;
             blockOffset = 0;
             to_write-=toWriteInBlock;
             blockWriting++;
@@ -187,6 +189,9 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
 }
 
 
+
+//TODO: Para o mesmo open_file_entry vários to_read terão de ser sequenciais
+// Podemos fazer um teste com isso
 ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     open_file_entry_t *file = get_open_file_entry(fhandle);
     if (file == NULL) {
@@ -218,6 +223,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         size_t blockOffset = file->of_offset - ((blockReading-1) * BLOCK_SIZE);
         size_t readingSpace = BLOCK_SIZE-blockOffset;
         size_t toReadInBlock = readingSpace < to_read ? readingSpace : to_read;
+        size_t bufferOffset = 0;
         char errorHandler;
         void* block;
 
@@ -231,7 +237,8 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
                 pthread_rwlock_unlock(&inode->rwlock);
                 return -1;
             }
-            memcpy(buffer, block + blockOffset, toReadInBlock);
+            memcpy(buffer + bufferOffset, block + blockOffset, toReadInBlock);
+            bufferOffset+=toReadInBlock;
             to_read-=toReadInBlock;
             toReadInBlock = BLOCK_SIZE < to_read ? BLOCK_SIZE : to_read;
             blockOffset = 0;

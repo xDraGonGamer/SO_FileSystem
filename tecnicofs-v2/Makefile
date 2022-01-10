@@ -1,6 +1,6 @@
 # Makefile, v1
 # Sistemas Operativos, DEI/IST/ULisboa 2021-22
-#
+
 # This makefile should be run from the *root* of the project
 
 CC ?= gcc
@@ -14,7 +14,7 @@ INCLUDES = $(addprefix -I, $(INCLUDE_DIRS))
 SOURCES  := $(wildcard */*.c)
 HEADERS  := $(wildcard */*.h)
 OBJECTS  := $(SOURCES:.c=.o)
-TARGET_EXECS := tests/test1
+TARGET_EXECS := tests/test1 tests/test_read_performance
 
 # VPATH is a variable used by Makefile which finds *sources* and makes them available throughout the codebase
 # vpath %.h <DIR> tells make to look for header files in <DIR>
@@ -66,6 +66,7 @@ fmt: $(SOURCES) $(HEADERS)
 # make uses a set of default rules, one of which compiles C binaries
 # the CC, LD, CFLAGS and LDFLAGS are used in this rule
 tests/test1: tests/test1.o fs/operations.o fs/state.o
+tests/test_read_performance: tests/test_read_performance.o fs/operations.o fs/state.o	
 
 clean:
 	rm -f $(OBJECTS) $(TARGET_EXECS)
