@@ -4,106 +4,90 @@
 #include <time.h>
 #include <pthread.h>
 
-#define SIZE 10
-#define COUNT 1000
+#define MAX_FILE_NAME_SIZE 3
+#define FILES 4
+#define SIZE 200000
 
 
 
-void* readForThread(void* entry){
-    int* f = (int*) entry;
-    char input[SIZE+1];
-    //size_t offset = get_open_file_entry(*f)->of_offset;
-    memset(input, 'A', SIZE);
-    char output [SIZE + 1];
-    input[SIZE]='\0'; output[SIZE]='\0';
-    assert(tfs_read(*f, output, SIZE)==SIZE);
-    printf("Output:%s\n\n",output);
-    /*if (memcmp(input, output, SIZE)!=0){
-        printf("Input:%s\nOutput:%s\n\n",input,output);
-        printf("OldOffset=%ld\n",offset);
-        printf("NewOffset=%ld\n",get_open_file_entry(*f)->of_offset);
-        printf("%ld\tZeroCheck = %d\n",strlen(output),output[strlen(output)]=='\0');
-    }*/
-    assert(memcmp(input, output, SIZE) == 0);
+void* readForThread(void* fileNumber){
+    int* number = (int*) fileNumber;
+    char output [SIZE];
+    char path[MAX_FILE_NAME_SIZE+1];
+    path[0]='/';
+    sprintf(path+1,"%d",*number);
+    int f;
+    f = tfs_open(path, TFS_O_CREAT);
+    ssize_t read = tfs_read(f, output, SIZE);
+    assert(read==SIZE);
+    assert(tfs_close(f) != -1);
     return NULL;
+}
+
+void readForSeq(int number){
+    char output[SIZE];
+    char path[MAX_FILE_NAME_SIZE+1];
+    path[0]='/';
+    sprintf(path+1,"%d",number);
+    int f;
+    f = tfs_open(path, TFS_O_CREAT);
+    assert(f != -1);
+    assert(tfs_read(f, output, SIZE)==SIZE);
+    assert(tfs_close(f) != -1);
 }
 
 
 
 int main() {
-    pthread_t tid[COUNT];
-    char *path = "/f1";
-    char input[SIZE+1];
-    clock_t startSeq, endSeq, startThread, endThread;
-    memset(input, 'A', SIZE);
-
-    char output [SIZE + 1];
-
+    pthread_t tid[FILES];
+    struct timespec startS, finishS, startT, finishT;
+    __time_t seqTime,threadTime;
+    int* fileNumbers = (int*) malloc(sizeof(int)*FILES);
     assert(tfs_init() != -1);
-
+    char path[MAX_FILE_NAME_SIZE+1];
+    path[0]='/';
     int f;
+    char input[SIZE];
 
-    f = tfs_open(path, TFS_O_CREAT);
-    assert(f != -1);
-    int me = 'A';
-    for (int i = 0; i < COUNT; i++) {
+    for (int i=0;i<FILES;i++){
+        fileNumbers[i] = i;
+    }    
+
+    for (int i=0;i<FILES;i++){
+        sprintf(path+1,"%d",i);
+        f = tfs_open(path, TFS_O_CREAT);
+        assert(f != -1);
+        int me = 'A';
         memset(input, me, SIZE);
         assert(tfs_write(f, input, SIZE) == SIZE);
-        input[SIZE] = '\0';
-        me++;
-        me = 'A' + (me%20);
+        assert(tfs_close(f) != -1);
     }
-    assert(tfs_close(f) != -1);
-
-
-    // Teste Sequencial
-
-    f = tfs_open(path, 0);
-    assert(f != -1);
-    me = 'A';
-    startSeq = clock();
-    for (int i = 0; i < COUNT; i++) {
-        size_t offset = get_open_file_entry(f)->of_offset;
-        assert(tfs_read(f, output, SIZE)==SIZE);
-        memset(input, me, SIZE);
-        if (memcmp(input, output, SIZE)){
-            input[SIZE] = '\0';
-            output[SIZE] = '\0';
-            printf("OldOffset:%ld\nNewOff:%ld\n",offset, get_open_file_entry(f)->of_offset);
-            printf("Input:%s\nOutput:%s\n\n",input,output);
-        }
-        assert(memcmp(input, output, SIZE) == 0);
-        me++;
-        me = 'A' + (me%20);
+    
+    // Test Sequential
+    clock_gettime(CLOCK_MONOTONIC, &startS);
+    for (int i=0;i<FILES;i++){
+        readForSeq(i);
     }
-    endSeq = clock();
-    assert(tfs_close(f) != -1);
-
+    clock_gettime(CLOCK_MONOTONIC, &finishS);
+    seqTime = (finishS.tv_nsec - startS.tv_nsec);
     // Teste multi-thread
 
-    f = tfs_open(path, TFS_O_CREAT);
-    assert(f != -1);
 
-    startThread = clock();
-    for (int i=0 ; i<COUNT ; i++){
-        assert(!pthread_create(&tid[i],0,readForThread,&f));
+    clock_gettime(CLOCK_MONOTONIC, &startT);
+    for (int i=0 ; i<FILES ; i++){
+        assert(!pthread_create(&tid[i],0,readForThread,&fileNumbers[i]));
     }
 
-    for (int i=0; i<COUNT ; i++){
+    for (int i=0; i<FILES ; i++){
         pthread_join(tid[i], NULL);
     }
     
-    endThread = clock();
-    assert(tfs_close(f) != -1);
+    clock_gettime(CLOCK_MONOTONIC, &finishT);
+    threadTime = (finishT.tv_nsec - startT.tv_nsec);
 
     printf("Successful test.\n");
-
-    clock_t Seq, Thread;
-    Seq = endSeq - startSeq;
-    Thread = endThread - startThread;
-
-    printf("Thread: %ld\tSeq: %ld\n",Thread,Seq);
-    printf("Programa em paralelo foi %ldx mais rápido\n",Seq/Thread);
+    printf("Programa em paralelo foi %ldx mais rápido\n\n",seqTime/threadTime);
+    printf("Time in nanoseconds:\nSequential: %ld ns\tThread: %ld ns\n",seqTime,threadTime);
 
     return 0;
 }
