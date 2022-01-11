@@ -10,8 +10,8 @@
 #define MAX_OPEN_FILES (20)
 #define MAX_FILE_NAME (40)
 #define DIRECT_BLOCK_COUNT (10)
-#define MAX_FILE_SIZE (2621440) //might be global
-#define MAX_INODE_BLOCKS (266) //might be global
+#define MAX_INODE_BLOCKS (10 + BLOCK_SIZE / sizeof(int))
+#define MAX_FILE_SIZE (BLOCK_SIZE * MAX_INODE_BLOCKS)
 #define BUFFER_SIZE (256)
 
 #define DELAY (5000)

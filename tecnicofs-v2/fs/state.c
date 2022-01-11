@@ -81,6 +81,7 @@ size_t divCeilRW(size_t i1, unsigned int i2){
  */
 void state_init() {
     pthread_mutex_init(&addFileEntryMutex, NULL);
+    pthread_mutex_init(&removeFileEntryMutex, NULL);
     for (size_t i = 0; i < INODE_TABLE_SIZE; i++) {
         freeinode_ts[i] = FREE;
     }
@@ -95,6 +96,28 @@ void state_init() {
 }
 
 void state_destroy() { /* nothing to do */
+
+    pthread_mutex_destroy(&addFileEntryMutex);
+
+    for(int i = 0; i < INODE_TABLE_SIZE; i++){
+        if(freeinode_ts[i] == TAKEN){
+            pthread_rwlock_destroy(&(inode_table[i].rwlock));
+            freeinode_ts[i] = FREE;
+        }
+    }
+
+    for(int i = 0; i < DATA_BLOCKS; i++){
+        free_blocks[i] = FREE;
+    }
+
+    for(int i = 0; i < MAX_OPEN_FILES; i++){
+        if(free_open_file_entries[i] == TAKEN){
+            free_open_file_entries[i] = FREE;
+            pthread_mutex_destroy(&open_file_table[i].file_entry_mutex);
+        }
+    }
+
+
 }
 
 /*
@@ -425,6 +448,7 @@ int add_to_open_file_table(int inumber, size_t offset, char isAppending) {
         if (free_open_file_entries[i] == FREE) {
             free_open_file_entries[i] = TAKEN;
             pthread_mutex_unlock(&addFileEntryMutex);
+            pthread_mutex_init(&open_file_table[i].file_entry_mutex, NULL);
             open_file_table[i].of_inumber = inumber;
             open_file_table[i].of_offset = offset;
             open_file_table[i].isAppending = isAppending;
@@ -441,12 +465,17 @@ int add_to_open_file_table(int inumber, size_t offset, char isAppending) {
  * Returns 0 is success, -1 otherwise
  */
 char remove_from_open_file_table(int fhandle) {
+    insert_delay();
+    pthread_mutex_lock(&removeFileEntryMutex);
     if (!valid_file_handle(fhandle) ||
         free_open_file_entries[fhandle] != TAKEN) {
         return -1;
     }
+    insert_delay();
+    pthread_mutex_destroy(&open_file_table[fhandle].file_entry_mutex);
     free_open_file_entries[fhandle] = FREE;
-    return 0;
+    pthread_mutex_unlock(&removeFileEntryMutex); //this lock serves the purpose of not having several threads closing the same file successfully
+    return 0; //lock still to think about
 }
 
 /* Returns pointer to a given entry in the open file table
@@ -458,5 +487,16 @@ open_file_entry_t *get_open_file_entry(int fhandle) {
     if (!valid_file_handle(fhandle)) {
         return NULL;
     }
+    insert_delay();
+    if(free_open_file_entries[fhandle] == FREE){ 
+        return NULL;
+    }
     return &open_file_table[fhandle];
 }
+
+
+
+
+
+
+

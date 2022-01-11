@@ -20,6 +20,7 @@ int tfs_init() {
 }
 
 int tfs_destroy() {
+    pthread_mutex_destroy(&newFileMutex);
     state_destroy();
     return 0;
 }
@@ -188,10 +189,6 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     return (ssize_t) (saveToWrite-to_write);
 }
 
-
-
-//TODO: Para o mesmo open_file_entry vários to_read terão de ser sequenciais
-// Podemos fazer um teste com isso
 ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     open_file_entry_t *file = get_open_file_entry(fhandle);
     if (file == NULL) {
@@ -208,6 +205,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         return 0;
     }
     pthread_rwlock_rdlock(&inode->rwlock); //critical zone ahead where reading occurs
+    pthread_mutex_lock(&file->file_entry_mutex);
 
     /* Determine how many bytes to read */
     size_t to_read = inode->i_size - file->of_offset;
@@ -231,10 +229,12 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
             block = getNthDataBlock(inode,blockReading,&errorHandler);
             if (errorHandler){
                 pthread_rwlock_unlock(&inode->rwlock);
+                pthread_mutex_unlock(&file->file_entry_mutex);
                 return -1;
             }
             if (block == NULL) {
                 pthread_rwlock_unlock(&inode->rwlock);
+                pthread_mutex_unlock(&file->file_entry_mutex);
                 return -1;
             }
             memcpy(buffer + bufferOffset, block + blockOffset, toReadInBlock);
@@ -250,6 +250,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         file->of_offset += (toReadSave-to_read);
     }
     pthread_rwlock_unlock(&inode->rwlock);
+    pthread_mutex_unlock(&file->file_entry_mutex);
     return (ssize_t)(toReadSave-to_read);
 }
 

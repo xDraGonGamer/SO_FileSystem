@@ -6,13 +6,13 @@
 
 #define MAX_FILE_NAME_SIZE 3
 #define FILES 4
-#define SIZE 200000
+#define SIZE 2000000
 
 
 
 void* readForThread(void* fileNumber){
     int* number = (int*) fileNumber;
-    char output [SIZE];
+    char output[SIZE];
     char path[MAX_FILE_NAME_SIZE+1];
     path[0]='/';
     sprintf(path+1,"%d",*number);
