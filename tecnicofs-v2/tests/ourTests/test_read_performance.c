@@ -1,4 +1,4 @@
-#include "../fs/operations.h"
+#include "../../fs/operations.h"
 #include <assert.h>
 #include <string.h>
 #include <time.h>
@@ -6,7 +6,7 @@
 
 #define MAX_FILE_NAME_SIZE 3
 #define FILES 4
-#define SIZE 2000000
+#define SIZE 200000
 
 
 

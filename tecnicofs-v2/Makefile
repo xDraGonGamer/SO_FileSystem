@@ -11,15 +11,22 @@ INCLUDE_DIRS := fs .
 # this creates a space separated list of -I<dir> where <dir> is each of the values in INCLUDE_DIRS
 INCLUDES = $(addprefix -I, $(INCLUDE_DIRS))
 
+# $(info ${BRO}), prints the var BRO
+
 SOURCES  := $(wildcard */*.c)
+OURTESTS := $(wildcard tests/ourTests/*.c)
+SOURCES += ${OURTESTS}
 HEADERS  := $(wildcard */*.h)
 OBJECTS  := $(SOURCES:.c=.o)
-TARGET_EXECS := tests/test1 tests/test_read_performance
+
+
+TARGET_EXECS := tests/test1  $(OURTESTS:.c=)  
 
 # VPATH is a variable used by Makefile which finds *sources* and makes them available throughout the codebase
 # vpath %.h <DIR> tells make to look for header files in <DIR>
 vpath # clears VPATH
 vpath %.h $(INCLUDE_DIRS)
+
 
 CFLAGS = -std=c11 -D_POSIX_C_SOURCE=200809L
 LDFLAGS = -pthread
@@ -41,6 +48,7 @@ ifeq ($(strip $(OPTIM)), no)
 else
   CFLAGS += -O3
 endif
+
 
 # A phony target is one that is not really the name of a file
 # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
@@ -66,7 +74,7 @@ fmt: $(SOURCES) $(HEADERS)
 # make uses a set of default rules, one of which compiles C binaries
 # the CC, LD, CFLAGS and LDFLAGS are used in this rule
 tests/test1: tests/test1.o fs/operations.o fs/state.o
-tests/test_read_performance: tests/test_read_performance.o fs/operations.o fs/state.o	
+$(TARGET_EXECS): %: %.o fs/operations.o fs/state.o 
 
 clean:
 	rm -f $(OBJECTS) $(TARGET_EXECS)
