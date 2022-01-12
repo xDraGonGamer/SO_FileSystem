@@ -85,11 +85,14 @@ int main(){
     for (int test=0; test<TEST_TIMES; test++){
 
         fhandle = tfs_open(filePath,TFS_O_CREAT);
+        assert(fhandle != -1);
         t2Struct->fhandle = fhandle;
 
+        //Init readCheck
         for (int i=0; i<COUNT; i++){
             t2Struct->readCheck[i]=0;
         }
+
         for (int i=0 ; i<COUNT ; i++){
             assert(!pthread_create(&tid[i],0,readForThread,t2Struct));
         }
@@ -107,5 +110,7 @@ int main(){
 
 
     printf("Successful test.\n");
+
+    return 0;
 
 }

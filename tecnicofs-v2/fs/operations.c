@@ -52,6 +52,7 @@ char open_existing_file(int flags, int inum, char* isAppending, size_t* offset){
                 return -1;
             }
             inode->i_size = 0;
+            inode->blocksAlloc=0;
         }
         pthread_rwlock_unlock(&inode->rwlock);
     }
