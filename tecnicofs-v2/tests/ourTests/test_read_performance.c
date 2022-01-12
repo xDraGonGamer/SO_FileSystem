@@ -18,8 +18,7 @@ void* readForThread(void* fileNumber){
     sprintf(path+1,"%d",*number);
     int f;
     f = tfs_open(path, TFS_O_CREAT);
-    ssize_t read = tfs_read(f, output, SIZE);
-    assert(read==SIZE);
+    assert(tfs_read(f, output, SIZE)==SIZE);
     assert(tfs_close(f) != -1);
     return NULL;
 }
