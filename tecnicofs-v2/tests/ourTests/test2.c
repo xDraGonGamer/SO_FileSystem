@@ -108,6 +108,7 @@ int main(){
         assert(t2Struct->readCheck[i]==1);
     }
 
+    tfs_destroy();
 
     printf("Successful test.\n");
 

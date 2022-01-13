@@ -84,6 +84,8 @@ int main() {
     clock_gettime(CLOCK_MONOTONIC, &finishT);
     threadTime = (finishT.tv_nsec - startT.tv_nsec);
 
+    tfs_destroy();
+
     printf("Successful test.\n");
     printf("Programa em paralelo foi %ldx mais rápido\n\n",seqTime/threadTime);
     printf("Time in nanoseconds:\nSequential: %ld ns\tThread: %ld ns\n",seqTime,threadTime);

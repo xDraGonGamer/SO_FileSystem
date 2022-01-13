@@ -133,6 +133,9 @@ int main(){
         isReadOk(read,output);
         //printf("output=%s,len=%ld\n",output,read);
     }
+
+    tfs_destroy();
+
     printf("Successful test.\n");
     
 
