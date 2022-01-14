@@ -81,7 +81,6 @@ size_t divCeilRW(size_t i1, unsigned int i2){
  */
 void state_init() {
     pthread_mutex_init(&addFileEntryMutex, NULL);
-    pthread_mutex_init(&removeFileEntryMutex, NULL);
     for (size_t i = 0; i < INODE_TABLE_SIZE; i++) {
         freeinode_ts[i] = FREE;
     }
@@ -91,6 +90,8 @@ void state_init() {
     }
 
     for (size_t i = 0; i < MAX_OPEN_FILES; i++) {
+        /*Init on all open_file_entries, so there are no bugs with tfs_close*/
+        pthread_mutex_init(&open_file_table[i].file_entry_mutex, NULL);
         free_open_file_entries[i] = FREE;
     }
 }
@@ -111,9 +112,9 @@ void state_destroy() { /* nothing to do */
     }
 
     for(int i = 0; i < MAX_OPEN_FILES; i++){
+        pthread_mutex_destroy(&open_file_table[i].file_entry_mutex);
         if(free_open_file_entries[i] == TAKEN){
             free_open_file_entries[i] = FREE;
-            pthread_mutex_destroy(&open_file_table[i].file_entry_mutex);
         }
     }
 
@@ -443,19 +444,23 @@ void *data_block_get(int block_number) {
  * Returns: file handle if successful, -1 otherwise
  */
 int add_to_open_file_table(int inumber, size_t offset, char isAppending) {
+    pthread_mutex_lock(&addFileEntryMutex);
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
-        pthread_mutex_lock(&addFileEntryMutex);
+        insert_delay();
         if (free_open_file_entries[i] == FREE) {
             free_open_file_entries[i] = TAKEN;
             pthread_mutex_unlock(&addFileEntryMutex);
-            pthread_mutex_init(&open_file_table[i].file_entry_mutex, NULL);
+            pthread_mutex_lock(&(open_file_table[i].file_entry_mutex));
+            insert_delay();
             open_file_table[i].of_inumber = inumber;
             open_file_table[i].of_offset = offset;
             open_file_table[i].isAppending = isAppending;
+            pthread_mutex_unlock(&(open_file_table[i].file_entry_mutex));
             return i;
         }
-        pthread_mutex_unlock(&addFileEntryMutex);
+        
     }
+    pthread_mutex_unlock(&addFileEntryMutex);
     return -1;
 }
 
@@ -465,16 +470,18 @@ int add_to_open_file_table(int inumber, size_t offset, char isAppending) {
  * Returns 0 is success, -1 otherwise
  */
 char remove_from_open_file_table(int fhandle) {
-    insert_delay();
-    pthread_mutex_lock(&removeFileEntryMutex);
-    if (!valid_file_handle(fhandle) ||
-        free_open_file_entries[fhandle] != TAKEN) {
+    if (!valid_file_handle(fhandle)){
         return -1;
     }
     insert_delay();
-    pthread_mutex_destroy(&open_file_table[fhandle].file_entry_mutex);
+    pthread_mutex_lock(&open_file_table[fhandle].file_entry_mutex);
+    if (free_open_file_entries[fhandle] != TAKEN) {
+        pthread_mutex_unlock(&open_file_table[fhandle].file_entry_mutex);
+        return -1;
+    }
+    insert_delay();
     free_open_file_entries[fhandle] = FREE;
-    pthread_mutex_unlock(&removeFileEntryMutex); //this lock serves the purpose of not having several threads closing the same file successfully
+    pthread_mutex_unlock(&open_file_table[fhandle].file_entry_mutex);
     return 0; //lock still to think about
 }
 
@@ -488,9 +495,12 @@ open_file_entry_t *get_open_file_entry(int fhandle) {
         return NULL;
     }
     insert_delay();
+    pthread_mutex_lock(&open_file_table[fhandle].file_entry_mutex);
     if(free_open_file_entries[fhandle] == FREE){ 
+        pthread_mutex_unlock(&open_file_table[fhandle].file_entry_mutex);
         return NULL;
     }
+    pthread_mutex_unlock(&open_file_table[fhandle].file_entry_mutex);
     return &open_file_table[fhandle];
 }
 

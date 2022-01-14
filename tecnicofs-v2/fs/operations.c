@@ -134,6 +134,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         return -1;
     }
     pthread_rwlock_wrlock(&inode->rwlock); //critical zone ahead where writing occurs
+    pthread_mutex_lock(&file->file_entry_mutex);
     if(file->isAppending){
         file->of_offset = inode->i_size; // if the file truncates after opening for appending
     }
@@ -148,6 +149,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     size_t saveToWrite = to_write;
     if (to_write > 0) {
         if (allocNecessaryBlocks(inode, sizeNeeded)==-1){
+            pthread_mutex_unlock(&file->file_entry_mutex);
             pthread_rwlock_unlock(&inode->rwlock);
             return -1;
         }
@@ -167,6 +169,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                 break;
             }
             if (block == NULL) {
+                pthread_mutex_unlock(&file->file_entry_mutex);
                 pthread_rwlock_unlock(&inode->rwlock);
                 return -1;
             }
@@ -186,6 +189,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
             inode->i_size = file->of_offset;
         }
     }
+    pthread_mutex_unlock(&file->file_entry_mutex);
     pthread_rwlock_unlock(&inode->rwlock);
     return (ssize_t) (saveToWrite-to_write);
 }
@@ -229,13 +233,13 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         while (to_read>0){
             block = getNthDataBlock(inode,blockReading,&errorHandler);
             if (errorHandler){
-                pthread_rwlock_unlock(&inode->rwlock);
                 pthread_mutex_unlock(&file->file_entry_mutex);
+                pthread_rwlock_unlock(&inode->rwlock);
                 return -1;
             }
             if (block == NULL) {
-                pthread_rwlock_unlock(&inode->rwlock);
                 pthread_mutex_unlock(&file->file_entry_mutex);
+                pthread_rwlock_unlock(&inode->rwlock);
                 return -1;
             }
             memcpy(buffer + bufferOffset, block + blockOffset, toReadInBlock);
@@ -250,8 +254,8 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
          * incremented accordingly */
         file->of_offset += (toReadSave-to_read);
     }
-    pthread_rwlock_unlock(&inode->rwlock);
     pthread_mutex_unlock(&file->file_entry_mutex);
+    pthread_rwlock_unlock(&inode->rwlock);
     return (ssize_t)(toReadSave-to_read);
 }
 
