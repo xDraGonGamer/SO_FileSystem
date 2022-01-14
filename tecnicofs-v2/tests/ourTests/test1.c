@@ -17,8 +17,7 @@ void* threadfunc(void* filepath){
 
 int main(){
     pthread_t tid[THREAD_COUNT];
-    char filepath[4] = "/f1";
-    filepath[3] = '\0';
+    char filepath[4] = "/f1\0";
     assert(tfs_init() != -1);
     for(int i = 0; i < THREAD_COUNT; i++){
         assert(!pthread_create(&tid[i], 0, threadfunc, filepath));
