@@ -44,6 +44,9 @@ void checkValidWriteValues(writeStruct* writeS){
             writeCount += writeS[i].written;
         }
     }
+    if (writeCount!=expectedSize){
+        printf("wrote:%ld,expected:%ld\n",writeCount,expectedSize);
+    }
     assert(writeCount==expectedSize);
 }
 
@@ -59,6 +62,24 @@ void* writeForThread(void* arg){
     wStruct->written = tfs_write(f, input, TO_WRITE);
     assert(wStruct->written!=-1);
     assert(tfs_close(f) != -1);
+    return NULL;
+}
+
+void* readForThread(void* arg){
+    writeStruct* wStruct = (writeStruct*) arg;
+    ssize_t wrote = wStruct->written;
+    char writeChar = 'a';
+    char path[5]="/fn\0\0";
+    sprintf(&path[2],"%d",wStruct->fileNumber);
+    char output[wrote+1];
+    char compare[TO_WRITE];
+    memset(compare, writeChar, TO_WRITE);
+    compare[(wrote-1)] ='\0';
+    int f = tfs_open(path, TFS_O_CREAT);
+    assert(f != -1);
+    assert(tfs_read(f, output, TO_WRITE)==wrote);
+    output[(wrote-1)] ='\0';
+    assert(strcmp(output,compare)==0);
     return NULL;
 }
 
@@ -82,8 +103,18 @@ int main(){
             pthread_join(tid[i], NULL);
         }    
 
-
         checkValidWriteValues(wSs);
+
+
+        for (int i=0 ; i<MAX_OPEN_FILES ; i++){
+            assert(!pthread_create(&tid[i],0,readForThread,&wSs[i]));
+        }  
+
+        for (int i=0 ; i<MAX_OPEN_FILES ; i++){
+            pthread_join(tid[i], NULL);
+        }    
+
+        
         
 
         tfs_destroy();

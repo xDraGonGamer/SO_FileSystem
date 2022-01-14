@@ -26,6 +26,11 @@ int main(){
     for (int i=0; i<THREAD_COUNT; i++){
         pthread_join(tid[i], NULL);
     }
+
     assert(test1(filepath) == 1);
+
+    printf("Successful test.\n");
+
+
     return 0;
 }

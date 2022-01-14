@@ -285,8 +285,9 @@ char add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
     /* Finds and fills the first empty entry */
     for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
         if (dir_entry[i].d_inumber == -1) {
-            dir_entry[i].d_inumber = sub_inumber;
-            strncpy(dir_entry[i].d_name, sub_name, MAX_FILE_NAME - 1);
+            strncpy(dir_entry[i].d_name, sub_name, MAX_FILE_NAME - 1); //1
+            dir_entry[i].d_inumber = sub_inumber;  //2
+            //trocar as linhas 1 e 2, foi dos meus melhores debugs
             dir_entry[i].d_name[MAX_FILE_NAME - 1] = '\0';
             return 0;
         }
@@ -514,7 +515,10 @@ open_file_entry_t *get_open_file_entry(int fhandle) {
     return &open_file_table[fhandle];
 }
 
+
+/*Função necessária para o nosso Teste1*/
 int test1(char* filename){
+    filename++; //retirar '/'
     dir_entry_t *dir_entry =
         (dir_entry_t *)data_block_get(inode_table[ROOT_DIR_INUM].i_data_block[0]);
     if (dir_entry == NULL) {
