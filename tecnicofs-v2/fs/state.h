@@ -75,6 +75,5 @@ int add_to_open_file_table(int inumber, size_t offset, char isAppending);
 char remove_from_open_file_table(int fhandle);
 open_file_entry_t *get_open_file_entry(int fhandle);
 
-//void apagar();
 
 #endif // STATE_H

@@ -18,7 +18,7 @@
 #define FS_SIZE (BLOCK_SIZE * DATA_BLOCKS)
 #define TO_WRITE ((FS_SIZE - (BLOCK_SIZE*(MAX_OPEN_FILES-1))) / (MAX_OPEN_FILES-1))
 #define DIRECT_SIZE (BLOCK_SIZE*DIRECT_BLOCK_COUNT)
-#define TEST_TIMES 200
+#define TEST_TIMES 20
 
 typedef struct {
     int fileNumber;
@@ -42,13 +42,6 @@ void checkValidWriteValues(writeStruct* writeS){
                 expectedSize -= (BLOCK_SIZE - (TO_WRITE%BLOCK_SIZE));
             }
             writeCount += writeS[i].written;
-        }
-    }
-    if (writeCount!=expectedSize){
-        //apagar();
-        printf("wCount:%ld,expected:%ld\n",writeCount,expectedSize);
-        for (int i=0; i<MAX_OPEN_FILES; i++){
-            printf("wrote:%ld\n",writeS[i].written);
         }
     }
     assert(writeCount==expectedSize);

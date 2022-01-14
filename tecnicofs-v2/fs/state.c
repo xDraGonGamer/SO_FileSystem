@@ -514,36 +514,4 @@ open_file_entry_t *get_open_file_entry(int fhandle) {
     return &open_file_table[fhandle];
 }
 
-/*void apagar(){
-    int blocks[1024];
-    int ok;
-    for (int i=0;i<1024;i++){
-        blocks[i]=-1;
-    }
-    for (int i=0;i<=MAX_OPEN_FILES;i++){
-        for (int n=0; n<DIRECT_BLOCK_COUNT; n++){
-            ok = inode_table[i].i_data_block[n];
-            printf("%d,",ok);
-            if (ok>=0 && ok<1024){
-                if (blocks[ok]!=-1){
-                    printf("\nLIXOU:%d, no file %d, bloco %d, oldblock: %d\n",ok,i,n,blocks[ok]);
-                }
-                blocks[ok]=i;
-            }
-        }
-        int* indirectionBlock = (int*) data_block_get(inode_table[i].indirect_data_block);
-        for (int n=0; n<20; n++){
-            ok = indirectionBlock[n];
-            printf("%d,",ok);
-            if (ok>=0 && ok<1024){
-                if (blocks[ok]!=-1){
-                    printf("\nLIXOU:%d, no file %d, blocoind %d, oldblock: %d\n",ok,i,n,blocks[ok]);
-                }
-                blocks[ok]=i;
-            }
-        }
-        printf("Alloced:%ld\n",inode_table[i].blocksAlloc);   
-    }
-}*/
-
 
