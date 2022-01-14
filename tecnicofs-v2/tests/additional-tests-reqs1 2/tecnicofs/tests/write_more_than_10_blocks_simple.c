@@ -1,12 +1,14 @@
-#include "../fs/operations.h"
+#include "../../../../fs/operations.h"
 #include <assert.h>
 #include <string.h>
 
-#define COUNT 40
+#define COUNT 80
 #define SIZE 256
 
 /**
-   This test fills in a new file up to 10 blocks via multiple writes, 
+   This test fills in a new file up to 20 blocks via multiple writes
+   (therefore causing the file to hold 10 direct references + 10 indirect
+   references from a reference block),
    each write always targeting only 1 block of the file, 
    then checks if the file contents are as expected
  */
@@ -36,9 +38,9 @@ int main() {
     /* Open again to check if contents are as expected */
     fd = tfs_open(path, 0);
     assert(fd != -1 );
-
     for (int i = 0; i < COUNT; i++) {
-        assert(tfs_read(fd, output, SIZE) == SIZE);
+        ssize_t bostarde = tfs_read(fd, output, SIZE);
+        assert(bostarde == SIZE);
         assert (memcmp(input, output, SIZE) == 0);
     }
 

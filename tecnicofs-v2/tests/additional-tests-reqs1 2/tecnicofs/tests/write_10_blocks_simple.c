@@ -1,13 +1,13 @@
-#include "../fs/operations.h"
+#include "../../../../fs/operations.h"
 #include <assert.h>
 #include <string.h>
 
 #define COUNT 40
-#define SIZE 250
+#define SIZE 256
 
 /**
    This test fills in a new file up to 10 blocks via multiple writes, 
-   where some calls to tfs_write may imply filling in 2 consecutive blocks, 
+   each write always targeting only 1 block of the file, 
    then checks if the file contents are as expected
  */
 
@@ -17,8 +17,7 @@ int main() {
     char *path = "/f1";
 
     /* Writing this buffer multiple times to a file stored on 1KB blocks will 
-       sometimes target 2 consecutive blocks (since 1KB is *not* a multiple of SIZE=250) 
-    */
+       always hit a single block (since 1KB is a multiple of SIZE=256) */
     char input[SIZE]; 
     memset(input, 'A', SIZE);
 
