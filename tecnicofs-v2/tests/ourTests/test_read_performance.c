@@ -88,7 +88,7 @@ int main() {
 
     printf("Successful test.\n");
     printf("Programa em paralelo foi %ldx mais rápido\n\n",seqTime/threadTime);
-    printf("Time in nanoseconds:\nSequential: %ld ns\tThread: %ld ns\n",seqTime,threadTime);
+    printf("Time in nanoseconds:\nSequential: %ld ns,\tThread: %ld ns\n",seqTime,threadTime);
 
     return 0;
 }
