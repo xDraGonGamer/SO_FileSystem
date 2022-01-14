@@ -514,4 +514,20 @@ open_file_entry_t *get_open_file_entry(int fhandle) {
     return &open_file_table[fhandle];
 }
 
+int test1(char* filename){
+    dir_entry_t *dir_entry =
+        (dir_entry_t *)data_block_get(inode_table[ROOT_DIR_INUM].i_data_block[0]);
+    if (dir_entry == NULL) {
+        return -1;
+    }
 
+    int count = 0;
+    for (int i = 0; i < MAX_DIR_ENTRIES; i++){     
+        if ((dir_entry[i].d_inumber != -1) &&
+            (strncmp(dir_entry[i].d_name, filename, MAX_FILE_NAME) == 0)) {
+            count++;
+        }
+    }
+    
+    return count;
+}

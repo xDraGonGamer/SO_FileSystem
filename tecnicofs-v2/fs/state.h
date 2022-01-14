@@ -63,6 +63,8 @@ void* getNthDataBlock(inode_t *inode, size_t nthBlock, char* errorHandler);
 char allocNthDataBlock(inode_t *inode, size_t blockNumber);
 char allocNecessaryBlocks(inode_t* inode, size_t sizeNeeded);
 
+int test1(char* filename);
+
 int clear_dir_entry(int inumber, int sub_inumber);
 char add_dir_entry(int inumber, int sub_inumber, char const *sub_name);
 int find_in_dir(int inumber, char const *sub_name);
