@@ -124,6 +124,7 @@ int tfs_close(int fhandle) { return remove_from_open_file_table(fhandle); }
 
 
 ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
+    char* myBuffer = (char*) buffer;
     open_file_entry_t *file = get_open_file_entry(fhandle);
     if (file == NULL) {
         return -1;
@@ -162,19 +163,18 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         size_t toWriteInBlock = writingSpace < to_write ? writingSpace : to_write;
         size_t bufferOffset = 0;
         char errorHandler;
-        void *block;
+        char *block;
         while (to_write>0){
-            block = getNthDataBlock(inode,blockWriting,&errorHandler);
+            block = (char*) getNthDataBlock(inode,blockWriting,&errorHandler);
             if (errorHandler){
                 break;
             }
             if (block == NULL) {
                 pthread_mutex_unlock(&file->file_entry_mutex);
                 pthread_rwlock_unlock(&inode->rwlock);
-                printf("joao4\n");
                 return -1;
             }
-            memcpy(block + blockOffset, buffer + bufferOffset, toWriteInBlock);
+            memcpy(&block[blockOffset], &myBuffer[bufferOffset], toWriteInBlock);
             bufferOffset+=toWriteInBlock;
             blockOffset = 0;
             to_write-=toWriteInBlock;
@@ -196,6 +196,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
 }
 
 ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
+    char* myBuffer = (char*) buffer;
     open_file_entry_t *file = get_open_file_entry(fhandle);
     if (file == NULL) {
         return -1;
@@ -229,10 +230,10 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         size_t toReadInBlock = readingSpace < to_read ? readingSpace : to_read;
         size_t bufferOffset = 0;
         char errorHandler;
-        void* block;
+        char* block;
 
         while (to_read>0){
-            block = getNthDataBlock(inode,blockReading,&errorHandler);
+            block = (char*) getNthDataBlock(inode,blockReading,&errorHandler);
             if (errorHandler){
                 pthread_mutex_unlock(&file->file_entry_mutex);
                 pthread_rwlock_unlock(&inode->rwlock);
@@ -243,7 +244,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
                 pthread_rwlock_unlock(&inode->rwlock);
                 return -1;
             }
-            memcpy(buffer + bufferOffset, block + blockOffset, toReadInBlock);
+            memcpy(&myBuffer[bufferOffset], &block[blockOffset], toReadInBlock);
             bufferOffset+=toReadInBlock;
             to_read-=toReadInBlock;
             toReadInBlock = BLOCK_SIZE < to_read ? BLOCK_SIZE : to_read;

@@ -46,6 +46,7 @@ typedef struct {
 
 
 pthread_mutex_t addFileEntryMutex;
+pthread_mutex_t allocBlock;
 
 size_t divCeil(size_t i1,unsigned int i2);
 size_t divCeilRW(size_t i1,unsigned int i2);
@@ -73,5 +74,7 @@ void *data_block_get(int block_number);
 int add_to_open_file_table(int inumber, size_t offset, char isAppending);
 char remove_from_open_file_table(int fhandle);
 open_file_entry_t *get_open_file_entry(int fhandle);
+
+//void apagar();
 
 #endif // STATE_H

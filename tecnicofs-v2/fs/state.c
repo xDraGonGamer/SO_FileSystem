@@ -80,6 +80,7 @@ size_t divCeilRW(size_t i1, unsigned int i2){
  * Initializes FS state
  */
 void state_init() {
+    pthread_mutex_init(&allocBlock, NULL);
     pthread_mutex_init(&addFileEntryMutex, NULL);
     for (size_t i = 0; i < INODE_TABLE_SIZE; i++) {
         freeinode_ts[i] = FREE;
@@ -97,7 +98,7 @@ void state_init() {
 }
 
 void state_destroy() { /* nothing to do */
-
+    pthread_mutex_destroy(&allocBlock);
     pthread_mutex_destroy(&addFileEntryMutex);
 
     for(int i = 0; i < INODE_TABLE_SIZE; i++){
@@ -210,7 +211,7 @@ char freeIndirectBlocks(inode_t *inode, size_t j){
     j -= 10;
     // Free indirect blocks
     for(i = 0; i < j; i++){
-        if (data_block_free(*(indirectionBlock + i)) == -1) {
+        if (data_block_free(indirectionBlock[i]) == -1) {
             return -1;
         }
     }
@@ -330,15 +331,18 @@ int find_in_dir(int inumber, char const *sub_name) {
  * Returns: block index if successful, -1 otherwise
  */
 int data_block_alloc() {
+    pthread_mutex_lock(&allocBlock);
     for (int i = 0; i < DATA_BLOCKS; i++) {
         if (i * (int) sizeof(allocation_state_t) % BLOCK_SIZE == 0) {
             insert_delay(); // simulate storage access delay to free_blocks
         }
         if (free_blocks[i] == FREE) {
             free_blocks[i] = TAKEN; 
+            pthread_mutex_unlock(&allocBlock);
             return i;
         }
     }
+    pthread_mutex_unlock(&allocBlock);
     return -1;
 }
 
@@ -371,7 +375,7 @@ char allocNthDataBlock(inode_t *inode, size_t blockNumber){
     }
     b = data_block_alloc();
     if (b==-1){
-        return 0; // cant find more blocks but getNthDataBlock handles this
+        return 1; // cant find more blocks but allocNecessaryBlocks handles this
     }
     blockNumber--;
     if (blockNumber>9){
@@ -379,7 +383,10 @@ char allocNthDataBlock(inode_t *inode, size_t blockNumber){
             inode->indirect_data_block = b;
             b = data_block_alloc();
             if (b==-1){
-                return 0; // cant find more blocks but getNthDataBlock handles this
+                if (data_block_free(inode->indirect_data_block) == -1){
+                    return -1;
+                }
+                return 1; // cant find more blocks but allocNecessaryBlocks handles this
             }
         }
         blockNumber-=10;
@@ -398,10 +405,14 @@ char allocNthDataBlock(inode_t *inode, size_t blockNumber){
 char allocNecessaryBlocks(inode_t* inode, size_t sizeNeeded){
     size_t blockOcc = inode->blocksAlloc;
     size_t blockNeeded = divCeil(sizeNeeded,BLOCK_SIZE);
+    char control;
     while(blockNeeded > blockOcc){
         blockOcc++;
-        if (allocNthDataBlock(inode,blockOcc)==-1){
+        control = allocNthDataBlock(inode,blockOcc);
+        if (control==-1){
             return -1;
+        } else if (control==1){
+            break;
         }
     }
     return 0;
@@ -503,9 +514,36 @@ open_file_entry_t *get_open_file_entry(int fhandle) {
     return &open_file_table[fhandle];
 }
 
-
-
-
-
+/*void apagar(){
+    int blocks[1024];
+    int ok;
+    for (int i=0;i<1024;i++){
+        blocks[i]=-1;
+    }
+    for (int i=0;i<=MAX_OPEN_FILES;i++){
+        for (int n=0; n<DIRECT_BLOCK_COUNT; n++){
+            ok = inode_table[i].i_data_block[n];
+            printf("%d,",ok);
+            if (ok>=0 && ok<1024){
+                if (blocks[ok]!=-1){
+                    printf("\nLIXOU:%d, no file %d, bloco %d, oldblock: %d\n",ok,i,n,blocks[ok]);
+                }
+                blocks[ok]=i;
+            }
+        }
+        int* indirectionBlock = (int*) data_block_get(inode_table[i].indirect_data_block);
+        for (int n=0; n<20; n++){
+            ok = indirectionBlock[n];
+            printf("%d,",ok);
+            if (ok>=0 && ok<1024){
+                if (blocks[ok]!=-1){
+                    printf("\nLIXOU:%d, no file %d, blocoind %d, oldblock: %d\n",ok,i,n,blocks[ok]);
+                }
+                blocks[ok]=i;
+            }
+        }
+        printf("Alloced:%ld\n",inode_table[i].blocksAlloc);   
+    }
+}*/
 
 

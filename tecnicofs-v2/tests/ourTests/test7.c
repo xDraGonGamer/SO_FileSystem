@@ -1,11 +1,14 @@
 /**
  * test7.c
- * Testa se o programa consegue escrever em MAX_OPEN_FILES ficheiros, concurrentemente, sabendo que o último
- * write vai exceder o espaço disponível no fs, devendo escrever apenas o que consegue
+ * Testa se o programa consegue escrever em MAX_OPEN_FILES ficheiros TO_WRITE chars, concurrentemente, 
+ * sabendo que vao haver ficheiros que vao escrever menos, porque TO_WRITE*MAX_OPEN_FILES > FS_SIZE 
+ * 
+ * Às vezes falha, mas é suposto nessa situação. Poderermos explicar na discussão
  * 
  */
 
 #include "../../fs/operations.h"
+#include "../../fs/state.h"
 #include <pthread.h>
 #include <assert.h>
 #include <stdio.h>
@@ -14,6 +17,8 @@
 
 #define FS_SIZE (BLOCK_SIZE * DATA_BLOCKS)
 #define TO_WRITE ((FS_SIZE - (BLOCK_SIZE*(MAX_OPEN_FILES-1))) / (MAX_OPEN_FILES-1))
+#define DIRECT_SIZE (BLOCK_SIZE*DIRECT_BLOCK_COUNT)
+#define TEST_TIMES 200
 
 typedef struct {
     int fileNumber;
@@ -21,17 +26,32 @@ typedef struct {
 } writeStruct;
 
 
-
 void checkValidWriteValues(writeStruct* writeS){
+    size_t expectedSize = FS_SIZE;
+    expectedSize -= BLOCK_SIZE; //bloco da raíz
     ssize_t writeCount=0;
+    ssize_t written;
     for (int i=0; i<MAX_OPEN_FILES; i++){
-        printf("wrote = %ld\n",writeS[i].written);
-        if (writeS[i].written>=0){
+        written = writeS[i].written;
+        if (written>=0){
+            if (written>DIRECT_SIZE){
+                expectedSize -= BLOCK_SIZE; //bloco de indirecao
+            }
+            if (written == TO_WRITE){
+                // retirar o que pode nao preencher se (TO_WRITE%BLOCK_SIZE)!=0
+                expectedSize -= (BLOCK_SIZE - (TO_WRITE%BLOCK_SIZE));
+            }
             writeCount += writeS[i].written;
         }
     }
-    printf("wCount:%ld,FS_SIZE:%d\n",writeCount,FS_SIZE);
-    assert(writeCount==FS_SIZE);
+    if (writeCount!=expectedSize){
+        //apagar();
+        printf("wCount:%ld,expected:%ld\n",writeCount,expectedSize);
+        for (int i=0; i<MAX_OPEN_FILES; i++){
+            printf("wrote:%ld\n",writeS[i].written);
+        }
+    }
+    assert(writeCount==expectedSize);
 }
 
 void* writeForThread(void* arg){
@@ -44,7 +64,7 @@ void* writeForThread(void* arg){
     int f = tfs_open(path, TFS_O_CREAT);
     assert(f != -1);
     wStruct->written = tfs_write(f, input, TO_WRITE);
-    printf("written:%ld\n",wStruct->written);
+    assert(wStruct->written!=-1);
     assert(tfs_close(f) != -1);
     return NULL;
 }
@@ -53,29 +73,28 @@ void* writeForThread(void* arg){
 int main(){
     pthread_t tid[MAX_OPEN_FILES];
     writeStruct wSs[MAX_OPEN_FILES];
-    /*size_t toWrite = ((FS_SIZE - (BLOCK_SIZE*(MAX_OPEN_FILES-1))) / (MAX_OPEN_FILES-1));
-    if (!( (FS_SIZE - (BLOCK_SIZE*(MAX_OPEN_FILES-1))) % (MAX_OPEN_FILES-1))){
-        toWrite--;
-    }*/
+    for (int n=0; n<TEST_TIMES; n++){
 
-    assert(tfs_init() != -1);
+        assert(tfs_init() != -1);
 
-    for (int i=0;i<MAX_OPEN_FILES;i++){
-        wSs[i].fileNumber = i;
+        for (int i=0;i<MAX_OPEN_FILES;i++){
+            wSs[i].fileNumber = i;
+        }
+
+        for (int i=0 ; i<MAX_OPEN_FILES ; i++){
+            assert(!pthread_create(&tid[i],0,writeForThread,&wSs[i]));
+        }  
+
+        for (int i=0 ; i<MAX_OPEN_FILES ; i++){
+            pthread_join(tid[i], NULL);
+        }    
+
+
+        checkValidWriteValues(wSs);
+        
+
+        tfs_destroy();
     }
-
-    for (int i=0 ; i<MAX_OPEN_FILES ; i++){
-        assert(!pthread_create(&tid[i],0,writeForThread,&wSs[i]));
-    }  
-
-    for (int i=0 ; i<MAX_OPEN_FILES ; i++){
-        pthread_join(tid[i], NULL);
-    }    
-
-
-    checkValidWriteValues(wSs);
-
-    tfs_destroy();
 
     printf("Successful test.\n");
 
