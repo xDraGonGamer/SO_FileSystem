@@ -171,6 +171,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
             if (block == NULL) {
                 pthread_mutex_unlock(&file->file_entry_mutex);
                 pthread_rwlock_unlock(&inode->rwlock);
+                printf("joao4\n");
                 return -1;
             }
             memcpy(block + blockOffset, buffer + bufferOffset, toWriteInBlock);

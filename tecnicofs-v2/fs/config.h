@@ -10,7 +10,7 @@
 #define MAX_OPEN_FILES (20)
 #define MAX_FILE_NAME (40)
 #define DIRECT_BLOCK_COUNT (10)
-#define MAX_INODE_BLOCKS (10 + BLOCK_SIZE / sizeof(int))
+#define MAX_INODE_BLOCKS (DIRECT_BLOCK_COUNT + BLOCK_SIZE / sizeof(int))
 #define MAX_FILE_SIZE (BLOCK_SIZE * MAX_INODE_BLOCKS)
 #define BUFFER_SIZE (256)
 

@@ -334,7 +334,6 @@ int data_block_alloc() {
         if (i * (int) sizeof(allocation_state_t) % BLOCK_SIZE == 0) {
             insert_delay(); // simulate storage access delay to free_blocks
         }
-        // No need to add a lock since this function is only called on tfs_write which already has a lock
         if (free_blocks[i] == FREE) {
             free_blocks[i] = TAKEN; 
             return i;
