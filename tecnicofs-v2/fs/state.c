@@ -358,7 +358,7 @@ void* getNthDataBlock(inode_t *inode, size_t nthBlock, char* errorHandler){
             return NULL;
         }
         nthBlock-=10;
-        return data_block_get(*(indirectionBlock+nthBlock));
+        return data_block_get(indirectionBlock[nthBlock]);
     } else {
         return data_block_get(inode->i_data_block[nthBlock]);
     }
@@ -388,7 +388,7 @@ char allocNthDataBlock(inode_t *inode, size_t blockNumber){
         if (indirectionBlock==NULL){
             return -1;
         }
-        *(indirectionBlock + blockNumber) = b;
+        indirectionBlock[blockNumber] = b;
     } else {
         inode->i_data_block[blockNumber] = b;
     }
