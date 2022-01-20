@@ -5,11 +5,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+static pthread_cond_t condVar;
 static pthread_mutex_t single_global_lock;
+static int openFiles;
 
 int tfs_init() {
     state_init();
-
+    openFiles = 0;
     if (pthread_mutex_init(&single_global_lock, 0) != 0)
         return -1;
 
@@ -24,9 +26,6 @@ int tfs_init() {
 
 int tfs_destroy() {
     state_destroy();
-    if (pthread_mutex_destroy(&single_global_lock) != 0) {
-        return -1;
-    }
     return 0;
 }
 
@@ -35,7 +34,16 @@ static bool valid_pathname(char const *name) {
 }
 
 int tfs_destroy_after_all_closed() {
-    /* TO DO: implement this */
+    if (pthread_mutex_lock(&single_global_lock) != 0)
+        return -1;
+    openFiles++;
+    openFiles*=(-1);
+    if (openFiles!=-1){
+        pthread_cond_wait(&condVar,&single_global_lock); //TODO: Ver se devolveu erros.
+    }
+    tfs_destroy();
+    if (pthread_mutex_unlock(&single_global_lock) != 0)
+        return -1;
     return 0;
 }
 
@@ -115,7 +123,13 @@ static int _tfs_open_unsynchronized(char const *name, int flags) {
 int tfs_open(char const *name, int flags) {
     if (pthread_mutex_lock(&single_global_lock) != 0)
         return -1;
+    if (openFiles<0){
+        return -1;
+    }
     int ret = _tfs_open_unsynchronized(name, flags);
+    if (ret!=-1){
+        openFiles++;
+    }
     if (pthread_mutex_unlock(&single_global_lock) != 0)
         return -1;
 
@@ -126,9 +140,15 @@ int tfs_close(int fhandle) {
     if (pthread_mutex_lock(&single_global_lock) != 0)
         return -1;
     int r = remove_from_open_file_table(fhandle);
-    if (pthread_mutex_unlock(&single_global_lock) != 0)
+    if (r!=-1){
+        openFiles+= openFiles>0 ? (-1) : 1;
+        if (openFiles==-1){
+            pthread_cond_signal(&condVar); //TODO: Ver se devolveu erros.
+        }
+    }
+    if (pthread_mutex_unlock(&single_global_lock) != 0){
         return -1;
-
+    }
     return r;
 }
 

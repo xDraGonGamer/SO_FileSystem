@@ -21,7 +21,7 @@ void *fn_thread(void *arg) {
     (void)
         arg; /* Since arg is not used, this line prevents a compiler warning */
 
-    sleep(10);
+    sleep(3);
 
     /* set *before* closing the file, so that it is set before
        tfs_destroy_after_all_close returns in the main thread
@@ -29,7 +29,6 @@ void *fn_thread(void *arg) {
     closed_file = 1;
 
     assert(tfs_close(f) != -1);
-
     return NULL;
 }
 
