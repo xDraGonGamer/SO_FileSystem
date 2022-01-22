@@ -1,5 +1,6 @@
 #ifndef COMMON_H
 #define COMMON_H
+#define S (1)
 
 /* tfs_open flags */
 enum {
@@ -7,6 +8,8 @@ enum {
     TFS_O_TRUNC = 0b010,
     TFS_O_APPEND = 0b100,
 };
+
+
 
 /* operation codes (for client-server requests) */
 enum {
