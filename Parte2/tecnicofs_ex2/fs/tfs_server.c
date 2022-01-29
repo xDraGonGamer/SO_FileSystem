@@ -66,19 +66,25 @@ ssize_t handle_tfs_mount(char *bufferIn){
 ssize_t handle_tfs_unmount(char *bufferIn){
     char bufferOut[sizeof(int)];
     int clientSessionID, fclient, out;
+    ssize_t ret;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
     out = 0;
     fclient = getClientFhandle(clientSessionID);
-    if (fclient<=0 || finishClientSession(clientSessionID)<=0 || close(fclient)<=0){
+    if (fclient<0 || finishClientSession(clientSessionID)<0){
         out = -1;
     }
     // TODO: Falta meter o clientsFHandle[SessionID] a -1, para saber que ha erro
     memcpy(bufferOut,&out,sizeof(int));
-    return write(fclient,bufferOut,sizeof(int));
+    ret = write(fclient,bufferOut,sizeof(int));
+    if (ret>=0){
+        if (close(fclient)<0){
+            return -1;
+        }
+    }
+    return ret;
 }
 
 ssize_t handle_tfs_open(char* bufferIn){
-    printf("ffodacejoao\n");
     char bufferOut[sizeof(int)];
     char fileName[41];
     int clientSessionID, fclient, flags, out;
@@ -86,7 +92,6 @@ ssize_t handle_tfs_open(char* bufferIn){
     fclient = clientsFHandle[clientSessionID];
     strcpy(fileName,&bufferIn[4]);
     memcpy(&flags,&bufferIn[4 + strlen(fileName) + 1],sizeof(int));
-    printf("csID- %d                  fileName- %s                        flags- %d\n", clientSessionID, fileName, flags);
     out = tfs_open(fileName,flags);
 
     memcpy(bufferOut,&out,sizeof(int));
@@ -124,7 +129,6 @@ ssize_t handle_tfs_write(char* bufferIn){
 }
 
 ssize_t handle_tfs_read(char* bufferIn){
-    char bufferOut[(sizeof(ssize_t)+BLOCK_SIZE)];
     int clientSessionID, fclient, fhandle;
     size_t len;
     ssize_t out;
@@ -132,10 +136,10 @@ ssize_t handle_tfs_read(char* bufferIn){
     fclient = clientsFHandle[clientSessionID];
     memcpy(&fhandle,&bufferIn[4],sizeof(int));
     memcpy(&len,&bufferIn[8],sizeof(size_t));
+    char bufferOut[sizeof(char)*len + sizeof(ssize_t)];
     out = tfs_read(fhandle,&bufferOut[sizeof(ssize_t)],len);
-
     memcpy(bufferOut,&out,sizeof(ssize_t));
-    return write(fclient,bufferOut,sizeof(ssize_t)+BLOCK_SIZE);
+    return write(fclient,bufferOut,sizeof(char)*len + sizeof(ssize_t));
 }
 
 
@@ -159,6 +163,9 @@ int main(int argc, char **argv) {
     ssize_t readOut,handleOut;
     char opCode;
     initClientsFHandle();
+    if (tfs_init()<0){
+        return -1;
+    }
     if (argc < 2) {
         printf("Please specify the pathname of the server's pipe.\n");
         return 1;
@@ -191,24 +198,31 @@ int main(int argc, char **argv) {
             switch (opCode)
             {
             case 1:
+                printf("1\n");
                 handleOut = handle_tfs_mount(&bufferIn[1]);
                 break;
             case 2:
+                printf("2\n");
                 handleOut = handle_tfs_unmount(&bufferIn[1]);
                 break;
             case 3:
+                printf("3\n");
                 handleOut = handle_tfs_open(&bufferIn[1]);
                 break;
             case 4:
+                printf("4\n");
                 handleOut = handle_tfs_close(&bufferIn[1]);
                 break;
             case 5:
+                printf("5\n");
                 handleOut = handle_tfs_write(&bufferIn[1]);
                 break;
             case 6:
+                printf("6\n");
                 handleOut = handle_tfs_read(&bufferIn[1]);
                 break;
             case 7:
+                printf("7\n");
                 handleOut = handle_tfs_shutdown_after_all_closed(&bufferIn[1]);
                 break;
             default:

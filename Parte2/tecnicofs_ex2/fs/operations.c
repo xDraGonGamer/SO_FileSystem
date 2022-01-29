@@ -132,7 +132,6 @@ int tfs_open(char const *name, int flags) {
     }
     if (pthread_mutex_unlock(&single_global_lock) != 0)
         return -1;
-
     return ret;
 }
 

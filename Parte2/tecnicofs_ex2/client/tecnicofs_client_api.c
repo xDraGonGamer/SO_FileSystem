@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
 int fclient, fserver, session_id;
 char* cpath;
 
@@ -58,35 +59,30 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
 int tfs_unmount() {
     char buffer[5];
     int serverResponse;
-    buffer[0] = TFS_OP_CODE_MOUNT;
-    buffer[1] = '\0';
+    buffer[0] = TFS_OP_CODE_UNMOUNT;
     memcpy(&buffer[1], &session_id, sizeof(int));
     if (write(fserver, buffer, 41) < 0)
         return -1;
     if (read(fclient, &serverResponse, sizeof(int)) < 0)
         return -1;
+    printf("unmount Response = %d\n",serverResponse);
     if (serverResponse>=0){
+        printf("here\n");
         close(fclient);
         close(fserver);
         unlink(cpath);
     }
+    printf("unmount Response = %d\n",serverResponse);
     return serverResponse;
 }
 
 int tfs_open(char const *name, int flags) {
-    printf("bom dia\n");
     char buffer[49];
     int serverResponse;
     buffer[0] = TFS_OP_CODE_OPEN;
-    //buffer[1] = '\0';
-    //strncat(buffer, (char*)&session_id, sizeof(int));
-    //strcat(buffer, name);
-    //strncat(buffer, (char*)&flags, sizeof(int));
     memcpy(&buffer[1], &session_id, sizeof(int));
     memcpy(&buffer[1 + sizeof(int)], name, strlen(name) + 1);
-    
-    memcpy(&buffer[1 + sizeof(int) + strlen(name)], &flags, sizeof(int));
-    printf("clikent ipunt: %s\n", buffer);
+    memcpy(&buffer[1 + sizeof(int) + strlen(name) + 1], &flags, sizeof(int));
     if (write(fserver, buffer, 49) < 0)
         return -1;
     if (read(fclient, &serverResponse, sizeof(int)) < 0)
@@ -111,11 +107,10 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     char wBuffer[1041];
     ssize_t serverResponse;
     wBuffer[0] = TFS_OP_CODE_WRITE;
-    wBuffer[1] = '\0';
-    strncat(wBuffer, (void*)&session_id, sizeof(int));
-    strncat(wBuffer, (void*)&fhandle, sizeof(int));
-    strncat(wBuffer, (void*)&len, sizeof(size_t));
-    strncat(wBuffer, (void*)buffer , len);
+    memcpy(&wBuffer[1], &session_id, sizeof(int));
+    memcpy(&wBuffer[1+sizeof(int)], &fhandle, sizeof(int));
+    memcpy(&wBuffer[1+2*(sizeof(int))], &len, sizeof(size_t));
+    memcpy(&wBuffer[1+2*(sizeof(int))+sizeof(size_t)], buffer , len);
     if (write(fserver, wBuffer, 1041) < 0)
         return -1;
     if (read(fclient, &serverResponse, sizeof(ssize_t)) < 0)
@@ -125,25 +120,22 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
 
 ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     char* myBuffer = (char*) buffer;
-    size_t readBytesFromServer = len+8;
+    size_t readBytesFromServer = len+sizeof(ssize_t);
     char rBuffer[readBytesFromServer]; // read info from server
     char wBuffer[17]; // write info to server  
     ssize_t serverResponse;
     wBuffer[0] = TFS_OP_CODE_READ;
-    wBuffer[1] = '\0';
-    strncat(wBuffer, (void*)&session_id, sizeof(int));
-    strncat(wBuffer, (void*)&fhandle, sizeof(int));
-    strncat(wBuffer, (void*)&len, sizeof(size_t));
+    memcpy(&wBuffer[1], &session_id, sizeof(int));
+    memcpy(&wBuffer[1+sizeof(int)], &fhandle, sizeof(int));
+    memcpy(&wBuffer[1+2*(sizeof(int))], &len, sizeof(size_t));
     if (write(fserver, wBuffer, 17) < 0)
         return -1;
-    if (read(fclient, &serverResponse, sizeof(ssize_t)) < 0)
+    if (read(fclient, &rBuffer, readBytesFromServer) < 0)
         return -1;
     memcpy(&serverResponse,rBuffer,sizeof(ssize_t));
-    if (serverResponse>=0){
-        memcpy(myBuffer,&rBuffer[8],len);
-    } else {
-        myBuffer[0] = '\0';
-    }
+    if (serverResponse>0){
+        memcpy(myBuffer,&rBuffer[sizeof(ssize_t)], (size_t) serverResponse);
+    } 
     return serverResponse;
 }
 
