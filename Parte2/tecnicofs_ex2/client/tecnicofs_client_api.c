@@ -4,25 +4,45 @@
 #include <fcntl.h>
 #include "string.h"
 #include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 int fclient, fserver, session_id;
 char* cpath;
 
 int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     char buffer[41];
+    cpath = (char*) malloc(sizeof(char) * 40);
     buffer[0] = (char) TFS_OP_CODE_MOUNT;
     buffer[1] = '\0';
     strcpy(cpath, client_pipe_path);
+
     if(mkfifo(client_pipe_path, 0777) < 0){
         return -1;
     }
-    if ((fserver = open(server_pipe_path, O_WRONLY)) < 0) return -1; //abre se o pipe de entrada de comunicacao do servidor
-    if ((fclient = open(client_pipe_path, O_RDONLY)) < 0) return -1; //abre se o pipe de entrada de comunicacao do cliente
+    
+
+    if ((fserver = open(server_pipe_path, O_WRONLY)) < 0){
+        unlink(client_pipe_path);
+        return -1; //abre se o pipe de entrada de comunicacao do servidor
+    }
     strcat(buffer, client_pipe_path);
-    if (write(fserver, buffer, 41) < 0)
+    if (write(fserver, buffer, 41) < 0){
+        close(fserver);
+        unlink(client_pipe_path);
         return -1;
-    if (read(fclient, &session_id, sizeof(int)) < 0)
+    }
+    if ((fclient = open(client_pipe_path, O_RDONLY)) < 0){
+        close(fserver);
+        unlink(client_pipe_path);
+        return -1; //abre se o pipe de entrada de comunicacao do cliente
+    }
+    if (read(fclient, &session_id, sizeof(int)) < 0){
+        close(fclient);
+        close(fserver);
+        unlink(client_pipe_path);
         return -1;
+    }
     if(session_id == -1){
         close(fclient);
         close(fserver);
@@ -40,7 +60,7 @@ int tfs_unmount() {
     int serverResponse;
     buffer[0] = TFS_OP_CODE_MOUNT;
     buffer[1] = '\0';
-    strncat(buffer, (void*)&session_id, sizeof(int));
+    memcpy(&buffer[1], &session_id, sizeof(int));
     if (write(fserver, buffer, 41) < 0)
         return -1;
     if (read(fclient, &serverResponse, sizeof(int)) < 0)
@@ -54,13 +74,19 @@ int tfs_unmount() {
 }
 
 int tfs_open(char const *name, int flags) {
+    printf("bom dia\n");
     char buffer[49];
     int serverResponse;
     buffer[0] = TFS_OP_CODE_OPEN;
-    buffer[1] = '\0';
-    strncat(buffer, (void*)&session_id, sizeof(int));
-    strcat(buffer, name);
-    strncat(buffer, (void*)&flags, sizeof(int));
+    //buffer[1] = '\0';
+    //strncat(buffer, (char*)&session_id, sizeof(int));
+    //strcat(buffer, name);
+    //strncat(buffer, (char*)&flags, sizeof(int));
+    memcpy(&buffer[1], &session_id, sizeof(int));
+    memcpy(&buffer[1 + sizeof(int)], name, strlen(name) + 1);
+    
+    memcpy(&buffer[1 + sizeof(int) + strlen(name)], &flags, sizeof(int));
+    printf("clikent ipunt: %s\n", buffer);
     if (write(fserver, buffer, 49) < 0)
         return -1;
     if (read(fclient, &serverResponse, sizeof(int)) < 0)
@@ -72,9 +98,8 @@ int tfs_close(int fhandle) {
     char buffer[9];
     int serverResponse;
     buffer[0] = TFS_OP_CODE_CLOSE;
-    buffer[1] = '\0';
-    strncat(buffer, (void*)&session_id, sizeof(int));
-    strncat(buffer, (void*)&fhandle, sizeof(int));
+    memcpy(&buffer[1], &session_id, sizeof(int));
+    memcpy(&buffer[1 + sizeof(int)], &fhandle, sizeof(int));
     if (write(fserver, buffer, 9) < 0)
         return -1;
     if (read(fclient, &serverResponse, sizeof(int)) < 0)

@@ -5,7 +5,7 @@
 
 #define INPUT_BUFFER_SIZE 1041 //buffer for info from client
 
-int clientsFHandle[S];
+int clientsFHandle[S]; //client table
 
 
 void initClientsFHandle(){
@@ -26,7 +26,7 @@ int openClientSession(char* client_pipe_name, int* fhandle){
     // maybe lock? TODO
     for (int i=0; i<S; i++){
         if (clientsFHandle[i]<0){
-            *fhandle = open(client_pipe_name,O_WRONLY);
+            *fhandle = open(client_pipe_name,O_WRONLY); //abre se o pipe
             if (*fhandle >= 0){
                 clientsFHandle[i] = *fhandle;
                 return i;
@@ -35,6 +35,7 @@ int openClientSession(char* client_pipe_name, int* fhandle){
             }     
         }
     }
+    *fhandle = open(client_pipe_name,O_WRONLY);
     return -1;
 }
 
@@ -55,8 +56,8 @@ ssize_t handle_tfs_mount(char *bufferIn){
     int out, fclient = -1;
     strcpy(client_pipe_name,bufferIn);
     out = openClientSession(client_pipe_name,&fclient);
-    if (fclient<0){
-        return -1; 
+    if(fclient < 0){
+        return -1;
     }
     memcpy(bufferOut,&out,sizeof(int));
     return write(fclient,bufferOut,sizeof(int));
@@ -64,7 +65,7 @@ ssize_t handle_tfs_mount(char *bufferIn){
 
 ssize_t handle_tfs_unmount(char *bufferIn){
     char bufferOut[sizeof(int)];
-    int clientSessionID, fclient, out=-1;
+    int clientSessionID, fclient, out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
     out = 0;
     fclient = getClientFhandle(clientSessionID);
@@ -77,13 +78,15 @@ ssize_t handle_tfs_unmount(char *bufferIn){
 }
 
 ssize_t handle_tfs_open(char* bufferIn){
+    printf("ffodacejoao\n");
     char bufferOut[sizeof(int)];
-    char fileName[40];
+    char fileName[41];
     int clientSessionID, fclient, flags, out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
     fclient = clientsFHandle[clientSessionID];
-    memcpy(fileName,&bufferIn[4],40);
-    memcpy(&flags,&bufferIn[44],sizeof(int));
+    strcpy(fileName,&bufferIn[4]);
+    memcpy(&flags,&bufferIn[4 + strlen(fileName) + 1],sizeof(int));
+    printf("csID- %d                  fileName- %s                        flags- %d\n", clientSessionID, fileName, flags);
     out = tfs_open(fileName,flags);
 
     memcpy(bufferOut,&out,sizeof(int));
@@ -115,7 +118,7 @@ ssize_t handle_tfs_write(char* bufferIn){
     toWrite = (char*) malloc(sizeof(char)*len); 
     memcpy(toWrite,&bufferIn[16],len);
     out = tfs_write(fhandle,toWrite,len);
-    free(toWrite);    
+    free(toWrite);
     memcpy(bufferOut,&out,sizeof(ssize_t));
     return write(fclient,bufferOut,sizeof(ssize_t));
 }
@@ -155,6 +158,7 @@ int main(int argc, char **argv) {
     char bufferIn[INPUT_BUFFER_SIZE];
     ssize_t readOut,handleOut;
     char opCode;
+    initClientsFHandle();
     if (argc < 2) {
         printf("Please specify the pathname of the server's pipe.\n");
         return 1;
@@ -168,11 +172,17 @@ int main(int argc, char **argv) {
     }
 
     int fserver = open(pipename, O_RDONLY);
+    if(fserver < 0){
+        return -1;
+    }
     while (1){
+        printf("looping...\n");
         readOut = read(fserver, bufferIn, INPUT_BUFFER_SIZE);
         if (!readOut){ //TODO, just here for debuging (maybe)
-            fprintf(stderr, "[INFO]: pipe closed\n");
-            return 0;
+            fserver = open(pipename, O_RDONLY);
+            if(fserver < 0){
+                return -1;
+            }
         } else if (readOut == -1) { //TODO, just here for debuging (maybe)
             fprintf(stderr, "[ERR]: read failed\n");
             exit(EXIT_FAILURE);
@@ -202,12 +212,12 @@ int main(int argc, char **argv) {
                 handleOut = handle_tfs_shutdown_after_all_closed(&bufferIn[1]);
                 break;
             default:
-                fprintf(stderr, "[ERR]: switch X(\n");
+                fprintf(stderr, "[ERR]: switch X1(, %d\n", opCode);
                 exit(EXIT_FAILURE);
             }
 
             if (handleOut < 0){
-                fprintf(stderr, "[ERR]: switch X(\n");
+                fprintf(stderr, "[ERR]: switch X2(%d\n", opCode);
                 exit(EXIT_FAILURE); 
             }
         }

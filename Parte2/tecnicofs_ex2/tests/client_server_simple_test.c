@@ -23,27 +23,34 @@ int main(int argc, char **argv) {
     }
 
     assert(tfs_mount(argv[1], argv[2]) == 0);
+    printf("joaomountcomplete\n");
 
     f = tfs_open(path, TFS_O_CREAT);
     assert(f != -1);
+    printf("joaoopencomplete\n");
 
     r = tfs_write(f, str, strlen(str));
     assert(r == strlen(str));
+    printf("joaowritecomplete\n");
 
     assert(tfs_close(f) != -1);
 
     f = tfs_open(path, 0);
     assert(f != -1);
+    printf("joaoopen2complete\n");
 
     r = tfs_read(f, buffer, sizeof(buffer) - 1);
     assert(r == strlen(str));
+    printf("joaoreadcomplete\n");
 
     buffer[r] = '\0';
     assert(strcmp(buffer, str) == 0);
 
     assert(tfs_close(f) != -1);
+    printf("joaoclosecomplete\n");
 
     assert(tfs_unmount() == 0);
+    printf("joaounmountcomplete\n");
 
     printf("Successful test.\n");
 
