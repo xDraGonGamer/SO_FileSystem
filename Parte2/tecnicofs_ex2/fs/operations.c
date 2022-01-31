@@ -12,6 +12,8 @@ static int openFiles;
 int tfs_init() {
     state_init();
     openFiles = 0;
+    if (pthread_cond_init(&condVar,NULL) != 0)
+        return -1;
     if (pthread_mutex_init(&single_global_lock, 0) != 0)
         return -1;
 

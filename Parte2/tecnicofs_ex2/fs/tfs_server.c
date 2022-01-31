@@ -5,11 +5,36 @@
 #include <pthread.h>
 
 #define INPUT_BUFFER_SIZE 1041 //buffer for info from client
+#define MAX_THREAD_INPUT_SIZE 2000 //TODO
+#define BUFFER_PARTS 4
 
+
+typedef struct {
+    char readable;
+    char info[MAX_THREAD_INPUT_SIZE];
+} bufferPCPart;
+
+typedef struct {
+    bufferPCPart parts[BUFFER_PARTS];
+    char tillEmpty;
+} bufferPC;
+
+typedef struct {
+    int sessionID;
+    int clientInfoMaxSize;
+
+} clientRequestInfo;
+
+
+bufferPC threadBuffers[S]; //consumer-producer buffers for every thread
 int clientsFHandle[S]; //client table
 
 
+pthread_cond_t writingCondVar;
+pthread_mutex_t writingMutex;
 pthread_mutex_t openClientSessionMutex;
+
+
 
 
 void initClientsFHandle(){
@@ -163,14 +188,100 @@ ssize_t handle_tfs_shutdown_after_all_closed(char* bufferIn){
     return write(fclient,bufferOut,sizeof(int));
 }
 
+clientRequestInfo* getClientRequestInfo(char opCode, char* bufferFromClient){
+    clientRequestInfo clientInfo;
+    if (opCode==1){
+        clientInfo.sessionID = -1;
+    } else {
+        memcpy(&(clientInfo.sessionID),&bufferFromClient[1],sizeof(int));
+        switch (opCode){
+            case 2:
+                clientInfo.clientInfoMaxSize = 5;
+                break;
+            case 3:
+                clientInfo.clientInfoMaxSize = 49;
+                break;
+            case 4:
+                clientInfo.clientInfoMaxSize = 9;
+                break;
+            case 5:
+                clientInfo.clientInfoMaxSize = 1041;
+                break;
+            case 6:
+                clientInfo.clientInfoMaxSize = 17;
+                break;
+            case 7:
+                clientInfo.clientInfoMaxSize = 5;
+                break;
+            default:
+                return NULL;
 
+        }
+    }
+    return &clientInfo;
+}
+
+
+// código para a thread que recebe info dos clientes
+void* threadReceiver(void* server_pipe_name){
+    pthread_mutex_init(&writingMutex,NULL);
+    char* pipename = (char*) server_pipe_name;
+    ssize_t readOut,handleOut;
+    clientRequestInfo* clientInfo;
+    char bufferIn[INPUT_BUFFER_SIZE];
+    char opCode;
+    char consmPtr[S];
+    memset(consmPtr,0,S); //TODO ma pratica?
+    if(mkfifo(pipename,0777) < 0){
+        exit(1);
+    }
+
+    int fserver = open(pipename, O_RDONLY);
+    if(fserver < 0){
+        return -1;
+    }
+    while (1){
+        readOut = read(fserver, bufferIn, INPUT_BUFFER_SIZE);
+        if (!readOut){
+            fserver = open(pipename, O_RDONLY);
+            if(fserver < 0){
+                return -1;
+            }
+        } else if (readOut == -1) { //TODO, just here for debuging (maybe)
+            fprintf(stderr, "[ERR]: read failed\n");
+            exit(EXIT_FAILURE);
+        } else {
+            memcpy(&opCode,bufferIn,sizeof(char));
+            clientInfo = getClientSessionID(opCode,bufferIn);
+            /*if (clientSessionID==NULL){
+                //RETURN ERRO
+            }*/
+            if (clientInfo->sessionID < 0){
+                //TODO
+            } else {
+                if (threadBuffers[clientInfo->sessionID].tillEmpty == S){ //buffer está full
+                    pthread_mutex_lock(&writingMutex);
+                    pthread_cond_wait(&writingCondVar,&writingMutex);
+                    pthread_mutex_unlock(&writingMutex);
+                } 
+                writeInBufferPC(bufferIn, clientInfo);
+
+            }
+        }
+    }
+}
+
+
+void* threadSender(void* noArgs){
+
+}
 
 
 
 int main(int argc, char **argv) {
-    char bufferIn[INPUT_BUFFER_SIZE];
-    ssize_t readOut,handleOut;
-    char opCode;
+    pthread_t tid[S+1];
+    if (pthread_cond_init(&writingCondVar,NULL) != 0)
+        return -1; 
     initClientsFHandle();
     if (tfs_init()<0){
         return -1;
@@ -183,27 +294,28 @@ int main(int argc, char **argv) {
     char *pipename = argv[1];
     printf("Starting TecnicoFS server with pipe called %s\n", pipename);
 
-    if(mkfifo(pipename,0777) < 0){
-        exit(1);
-    }
-
-    int fserver = open(pipename, O_RDONLY);
-    if(fserver < 0){
+    if (pthread_create(&tid[S],0,threadReceiver,pipename) < 0)
         return -1;
+    for (int i=0; i<S; i++){
+        if (pthread_create(&tid[i],0,threadSender,NULL) < 0)
+            return -1; 
     }
-    while (1){
-        readOut = read(fserver, bufferIn, INPUT_BUFFER_SIZE);
-        if (!readOut){ //TODO, just here for debuging (maybe)
-            fserver = open(pipename, O_RDONLY);
-            if(fserver < 0){
-                return -1;
-            }
-        } else if (readOut == -1) { //TODO, just here for debuging (maybe)
-            fprintf(stderr, "[ERR]: read failed\n");
-            exit(EXIT_FAILURE);
-        } else {
-            memcpy(&opCode,bufferIn,sizeof(char));
-            switch (opCode)
+    
+    return 0;
+}
+
+
+/*int tfs_server_mount(char* joao){
+
+    if(clientCount < S){
+        
+    }
+    return -1;
+
+} TODO check if needed*/ 
+
+/*
+switch (opCode)
             {
             case 1:
                 handleOut = handle_tfs_mount(&bufferIn[1]);
@@ -236,19 +348,4 @@ int main(int argc, char **argv) {
                 exit(EXIT_FAILURE); 
             }
         }
-
-
-    }
-
-    return 0;
-}
-
-
-/*int tfs_server_mount(char* joao){
-
-    if(clientCount < S){
-        
-    }
-    return -1;
-
-} TODO check if needed*/ 
+*/
