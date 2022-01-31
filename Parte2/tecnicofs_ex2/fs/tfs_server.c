@@ -2,13 +2,18 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #define INPUT_BUFFER_SIZE 1041 //buffer for info from client
 
 int clientsFHandle[S]; //client table
 
 
+pthread_mutex_t openClientSessionMutex;
+
+
 void initClientsFHandle(){
+    pthread_mutex_init(&openClientSessionMutex, NULL);
     for (int i=0; i<S; i++){
         clientsFHandle[i] = -1;
     }
@@ -24,18 +29,22 @@ int getClientFhandle(int sessionId){
 
 int openClientSession(char* client_pipe_name, int* fhandle){
     // maybe lock? TODO
+    pthread_mutex_lock(&openClientSessionMutex);
     for (int i=0; i<S; i++){
         if (clientsFHandle[i]<0){
             *fhandle = open(client_pipe_name,O_WRONLY); //abre se o pipe
             if (*fhandle >= 0){
                 clientsFHandle[i] = *fhandle;
+                pthread_mutex_unlock(&openClientSessionMutex);
                 return i;
             } else {
+                pthread_mutex_unlock(&openClientSessionMutex);
                 return -1;
-            }     
+            }
         }
     }
-    *fhandle = open(client_pipe_name,O_WRONLY);
+    pthread_mutex_unlock(&openClientSessionMutex);
+    *fhandle = open(client_pipe_name,O_WRONLY); //ver isto depois
     return -1;
 }
 
@@ -43,7 +52,7 @@ int finishClientSession(int sessionId){
     if (sessionId >= S){
         return -1;
     } 
-    //TODO maybe lock
+    //TODO maybe lock////////////////
     clientsFHandle[sessionId] = -1;
     return 0;
 
@@ -183,7 +192,6 @@ int main(int argc, char **argv) {
         return -1;
     }
     while (1){
-        printf("looping...\n");
         readOut = read(fserver, bufferIn, INPUT_BUFFER_SIZE);
         if (!readOut){ //TODO, just here for debuging (maybe)
             fserver = open(pipename, O_RDONLY);
@@ -198,31 +206,24 @@ int main(int argc, char **argv) {
             switch (opCode)
             {
             case 1:
-                printf("1\n");
                 handleOut = handle_tfs_mount(&bufferIn[1]);
                 break;
             case 2:
-                printf("2\n");
                 handleOut = handle_tfs_unmount(&bufferIn[1]);
                 break;
             case 3:
-                printf("3\n");
                 handleOut = handle_tfs_open(&bufferIn[1]);
                 break;
             case 4:
-                printf("4\n");
                 handleOut = handle_tfs_close(&bufferIn[1]);
                 break;
             case 5:
-                printf("5\n");
                 handleOut = handle_tfs_write(&bufferIn[1]);
                 break;
             case 6:
-                printf("6\n");
                 handleOut = handle_tfs_read(&bufferIn[1]);
                 break;
             case 7:
-                printf("7\n");
                 handleOut = handle_tfs_shutdown_after_all_closed(&bufferIn[1]);
                 break;
             default:

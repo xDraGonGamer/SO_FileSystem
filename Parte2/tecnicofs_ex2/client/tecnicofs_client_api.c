@@ -21,7 +21,6 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     if(mkfifo(client_pipe_path, 0777) < 0){
         return -1;
     }
-    
 
     if ((fserver = open(server_pipe_path, O_WRONLY)) < 0){
         unlink(client_pipe_path);
@@ -53,9 +52,6 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     return 0;
 }
 
-
-
-
 int tfs_unmount() {
     char buffer[5];
     int serverResponse;
@@ -65,14 +61,11 @@ int tfs_unmount() {
         return -1;
     if (read(fclient, &serverResponse, sizeof(int)) < 0)
         return -1;
-    printf("unmount Response = %d\n",serverResponse);
     if (serverResponse>=0){
-        printf("here\n");
         close(fclient);
         close(fserver);
         unlink(cpath);
     }
-    printf("unmount Response = %d\n",serverResponse);
     return serverResponse;
 }
 
