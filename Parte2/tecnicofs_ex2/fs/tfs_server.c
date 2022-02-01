@@ -17,7 +17,7 @@ typedef struct {
 
 typedef struct {
     int sessionID;
-    int clientInfoMaxSize;
+    size_t clientInfoMaxSize;
 } clientRequestInfo;
 
 
@@ -25,13 +25,22 @@ bufferPC threadBuffers[S]; //consumer-producer buffers for every thread
 int clientsFHandle[S]; //client table
 
 
-pthread_cond_t sessionsCondVars[S]; //TODO init a isto
-pthread_mutex_t sessionsMutexes[S]; //TODO init a isto
+pthread_cond_t sessionsCondVars[S];
+pthread_mutex_t sessionsMutexes[S]; 
 pthread_mutex_t writingMutex;
 pthread_mutex_t openClientSessionMutex;
 
 
 
+char initPthreadVars(){
+    for (int i=0; i<S; i++){
+        if ( (pthread_cond_init(&sessionsCondVars[i],NULL) < 0)
+        || (pthread_mutex_init(&sessionsMutexes[i],NULL) < 0) ){
+            return -1;
+        }
+    }
+    return 0;
+}
 
 void initClientsFHandle(){
     pthread_mutex_init(&openClientSessionMutex, NULL);
@@ -80,7 +89,7 @@ int finishClientSession(int sessionId){
 }
 
 
-ssize_t handle_tfs_mount(char *bufferIn){
+char handle_tfs_mount(char *bufferIn){
     char bufferOut[sizeof(int)];
     char client_pipe_name[40];
     int out, fclient = -1;
@@ -90,10 +99,12 @@ ssize_t handle_tfs_mount(char *bufferIn){
         return -1;
     }
     memcpy(bufferOut,&out,sizeof(int));
-    return write(fclient,bufferOut,sizeof(int));
+    if (write(fclient,bufferOut,sizeof(int)) < 0){
+        return -1;
+    } return 0;
 }
 
-ssize_t handle_tfs_unmount(char *bufferIn){
+char handle_tfs_unmount(char *bufferIn){
     char bufferOut[sizeof(int)];
     int clientSessionID, fclient, out;
     ssize_t ret;
@@ -110,11 +121,12 @@ ssize_t handle_tfs_unmount(char *bufferIn){
         if (close(fclient)<0){
             return -1;
         }
+        return 0;
     }
-    return ret;
+    return -1;
 }
 
-ssize_t handle_tfs_open(char* bufferIn){
+char handle_tfs_open(char* bufferIn){
     char bufferOut[sizeof(int)];
     char fileName[41];
     int clientSessionID, fclient, flags, out;
@@ -125,10 +137,12 @@ ssize_t handle_tfs_open(char* bufferIn){
     out = tfs_open(fileName,flags);
 
     memcpy(bufferOut,&out,sizeof(int));
-    return write(fclient,bufferOut,sizeof(int));
+    if (write(fclient,bufferOut,sizeof(int))){
+        return -1;
+    } return 0;
 }
 
-ssize_t handle_tfs_close(char* bufferIn){
+char handle_tfs_close(char* bufferIn){
     char bufferOut[sizeof(int)];
     int clientSessionID, fclient, fhandle, out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
@@ -137,43 +151,47 @@ ssize_t handle_tfs_close(char* bufferIn){
     out = tfs_close(fhandle);
 
     memcpy(bufferOut,&out,sizeof(int));
-    return write(fclient,bufferOut,sizeof(int));
+    if (write(fclient,bufferOut,sizeof(int)) < 0){
+        return -1;
+    } return 0;
 }
 
-ssize_t handle_tfs_write(char* bufferIn){
+char handle_tfs_write(char* bufferIn){
     char bufferOut[sizeof(ssize_t)];
     char* toWrite;
-    int clientSessionID, fclient, fhandle;
+    int clientSessionID, fclient, fhandle, out;
     size_t len;
-    ssize_t out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
     fclient = clientsFHandle[clientSessionID];
     memcpy(&fhandle,&bufferIn[4],sizeof(int));
     memcpy(&len,&bufferIn[8],sizeof(size_t));
     toWrite = (char*) malloc(sizeof(char)*len); 
     memcpy(toWrite,&bufferIn[16],len);
-    out = tfs_write(fhandle,toWrite,len);
+    out = (int) tfs_write(fhandle,toWrite,len);
     free(toWrite);
-    memcpy(bufferOut,&out,sizeof(ssize_t));
-    return write(fclient,bufferOut,sizeof(ssize_t));
+    memcpy(bufferOut,&out,sizeof(int));
+    if (write(fclient,bufferOut,sizeof(ssize_t)) < 0){
+        return -1;
+    } return 0;
 }
 
-ssize_t handle_tfs_read(char* bufferIn){
-    int clientSessionID, fclient, fhandle;
+char handle_tfs_read(char* bufferIn){
+    int clientSessionID, fclient, fhandle, out;
     size_t len;
-    ssize_t out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
     fclient = clientsFHandle[clientSessionID];
     memcpy(&fhandle,&bufferIn[4],sizeof(int));
     memcpy(&len,&bufferIn[8],sizeof(size_t));
     char bufferOut[sizeof(char)*len + sizeof(ssize_t)];
-    out = tfs_read(fhandle,&bufferOut[sizeof(ssize_t)],len);
-    memcpy(bufferOut,&out,sizeof(ssize_t));
-    return write(fclient,bufferOut,sizeof(char)*len + sizeof(ssize_t));
+    out = (int) tfs_read(fhandle,&bufferOut[sizeof(ssize_t)],len);
+    memcpy(bufferOut,&out,sizeof(int));
+    if (write(fclient,bufferOut,sizeof(char)*len + sizeof(ssize_t)) < 0){
+        return -1;
+    } return 0;
 }
 
 
-ssize_t handle_tfs_shutdown_after_all_closed(char* bufferIn){
+char handle_tfs_shutdown_after_all_closed(char* bufferIn){
     char bufferOut[sizeof(int)];
     int clientSessionID, fclient, out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
@@ -181,7 +199,9 @@ ssize_t handle_tfs_shutdown_after_all_closed(char* bufferIn){
     out = tfs_destroy_after_all_closed();
 
     memcpy(bufferOut,&out,sizeof(int));
-    return write(fclient,bufferOut,sizeof(int));
+    if (write(fclient,bufferOut,sizeof(int)) < 0){
+        return -1;
+    } return 0;
 }
 
 clientRequestInfo getClientRequestInfo(char opCode, char* bufferFromClient){
@@ -234,14 +254,14 @@ void* threadReceiver(void* server_pipe_name){
 
     int fserver = open(pipename, O_RDONLY);
     if(fserver < 0){
-        return -1;
+        //TODO struct for error, or exit(error) (algo assim)
     }
     while (1){
         readOut = read(fserver, bufferIn, INPUT_BUFFER_SIZE);
         if (!readOut){
             fserver = open(pipename, O_RDONLY);
             if(fserver < 0){
-                return -1;
+                //TODO struct for error, or exit(error) (algo assim)
             }
         } else if (readOut == -1) { //TODO, just here for debuging (maybe)
             fprintf(stderr, "[ERR]: read failed\n");
@@ -271,30 +291,34 @@ char runClientRequest(char* info){
     memcpy(&opCode,info,sizeof(char));
     switch (opCode) {
         case 1:
-            handleOut = handle_tfs_mount(&bufferIn[1]);
+            handleOut = handle_tfs_mount(&info[1]);
             break;
         case 2:
-            handleOut = handle_tfs_unmount(&bufferIn[1]);
+            handleOut = handle_tfs_unmount(&info[1]);
             break;
         case 3:
-            handleOut = handle_tfs_open(&bufferIn[1]);
+            handleOut = handle_tfs_open(&info[1]);
             break;
         case 4:
-            handleOut = handle_tfs_close(&bufferIn[1]);
+            handleOut = handle_tfs_close(&info[1]);
             break;
         case 5:
-            handleOut = handle_tfs_write(&bufferIn[1]);
+            handleOut = handle_tfs_write(&info[1]);
             break;
         case 6:
-            handleOut = handle_tfs_read(&bufferIn[1]);
+            handleOut = handle_tfs_read(&info[1]);
             break;
         default: // case 7
-            handleOut = handle_tfs_shutdown_after_all_closed(&bufferIn[1]);
+            handleOut = handle_tfs_shutdown_after_all_closed(&info[1]);
     }
     if (handleOut < 0){
         fprintf(stderr, "[ERR]: switch X2(%d\n", opCode);
         exit(EXIT_FAILURE); 
+        //TODO decidir o que fazer nesta situacao
     }
+    if (opCode == 7){
+        return 1;
+    } return 0;
 }
 
 
@@ -313,13 +337,15 @@ void* threadSender(void* id){
         readFromBufferPC(buffer,*sessionID); 
         shutdown = runClientRequest(buffer);
         if (shutdown){
+            // sutdown after all has been done
             break;
         }
     } 
     //TODO código se houver shutdown
-    if (pthread_mutex_lock(&(sessionsMutexes[*sessionID])) < 0){
+    if (pthread_mutex_unlock(&(sessionsMutexes[*sessionID])) < 0){
         //TODO define struct for thread return
     }
+    exit(0); // isto dá exit ao programa todo
 
 }
 
@@ -327,8 +353,9 @@ void* threadSender(void* id){
 
 int main(int argc, char **argv) {
     pthread_t tid[S+1];
-    if (pthread_cond_init(&writingCondVar,NULL) != 0)
-        return -1; 
+    if (initPthreadVars() < 0){
+        return -1;
+    }
     initClientsFHandle();
     if (tfs_init()<0){
         return -1;
