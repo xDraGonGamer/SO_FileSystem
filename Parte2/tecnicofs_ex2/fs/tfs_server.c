@@ -6,7 +6,7 @@
 
 #define INPUT_BUFFER_SIZE 1041 //buffer for info from client
 #define MAX_THREAD_INPUT_SIZE 2000 //TODO
-#define BUFFER_PARTS 4
+#define BUFFER_PARTS 4 //try to implement later
 
 
 typedef struct {
@@ -57,7 +57,7 @@ int getClientFhandle(int sessionId){
     }
 }
 
-int openClientSession(char* client_pipe_name, int* fhandle){
+/*int openClientSession(char* client_pipe_name, int* fhandle){
     // maybe lock? TODO
     pthread_mutex_lock(&openClientSessionMutex);
     for (int i=0; i<S; i++){
@@ -68,21 +68,47 @@ int openClientSession(char* client_pipe_name, int* fhandle){
                 pthread_mutex_unlock(&openClientSessionMutex);
                 return i;
             } else {
-                pthread_mutex_unlock(&openClientSessionMutex);
-                return -1;
+                fprintf(stderr, "ERROR: Server failed to open client pipe.\n");
+                exit(EXIT_FAILURE);
             }
         }
     }
     pthread_mutex_unlock(&openClientSessionMutex);
     *fhandle = open(client_pipe_name,O_WRONLY); //ver isto depois
     return -1;
+} */
+
+int openClientSession(char* client_pipe_name, int sessionID){
+
+    int fhandle = open(client_pipe_name,O_WRONLY);
+    if (fhandle >= 0){
+        clientsFHandle[sessionID] = fhandle;
+        return fhandle;
+    } else {
+        fprintf(stderr, "ERROR: Server failed to open client pipe.\n");
+        exit(EXIT_FAILURE);
+    }
+    
+
+}
+
+int getAvailableSession(){
+    pthread_mutex_lock(&openClientSessionMutex);
+    for(int i = 0; i < S; i++){
+        if(clientsFHandle[i] < 0){
+            clientsFHandle[i] = 0;
+            pthread_mutex_unlock(&openClientSessionMutex);
+            return i;
+        }
+    }
+    pthread_mutex_unlock(&openClientSessionMutex);
+    return -1;
 }
 
 int finishClientSession(int sessionId){
     if (sessionId >= S){
         return -1;
-    } 
-    //TODO maybe lock////////////////
+    }
     clientsFHandle[sessionId] = -1;
     return 0;
 
@@ -92,13 +118,11 @@ int finishClientSession(int sessionId){
 char handle_tfs_mount(char *bufferIn){
     char bufferOut[sizeof(int)];
     char client_pipe_name[40];
-    int out, fclient = -1;
-    strcpy(client_pipe_name,bufferIn);
-    out = openClientSession(client_pipe_name,&fclient);
-    if(fclient < 0){
-        return -1;
-    }
-    memcpy(bufferOut,&out,sizeof(int));
+    int fclient, sessionID;
+    memcpy(&sessionID, &bufferIn[1], sizeof(int));
+    strcpy(client_pipe_name,&bufferIn[5]);
+    fclient = openClientSession(client_pipe_name, sessionID);
+    memcpy(bufferOut,&sessionID,sizeof(int));
     if (write(fclient,bufferOut,sizeof(int)) < 0){
         return -1;
     } return 0;
@@ -114,12 +138,12 @@ char handle_tfs_unmount(char *bufferIn){
     if (fclient<0 || finishClientSession(clientSessionID)<0){
         out = -1;
     }
-    // TODO: Falta meter o clientsFHandle[SessionID] a -1, para saber que ha erro
     memcpy(bufferOut,&out,sizeof(int));
     ret = write(fclient,bufferOut,sizeof(int));
     if (ret>=0){
         if (close(fclient)<0){
-            return -1;
+            fprintf(stderr, "ERROR: Failed to close client channel.\n");
+            exit(EXIT_FAILURE);
         }
         return 0;
     }
@@ -137,7 +161,7 @@ char handle_tfs_open(char* bufferIn){
     out = tfs_open(fileName,flags);
 
     memcpy(bufferOut,&out,sizeof(int));
-    if (write(fclient,bufferOut,sizeof(int))){
+    if (write(fclient,bufferOut,sizeof(int)) < 0){
         return -1;
     } return 0;
 }
@@ -233,8 +257,19 @@ clientRequestInfo getClientRequestInfo(char opCode, char* bufferFromClient){
     return clientInfo;
 }
 
+void sendUserCountFullMessage(char* bufferIn){
+    char client_pipe_name[40];
+    char out = -1;
+    strcpy(client_pipe_name, &bufferIn[1]);
+    int fhandle = open(client_pipe_name, O_WRONLY);
+    if(write(fhandle, &out, sizeof(char)) < 0){
+        fprintf(stderr, "ERROR: Unable to contact client.\n");
+        exit(EXIT_FAILURE);
+    }
+}
 
-void writeInBufferPC(char* bufferIn, clientRequestInfo clientInfo){
+
+void writeToBufferPC(char* bufferIn, clientRequestInfo clientInfo){
     memcpy(threadBuffers[clientInfo.sessionID].info,bufferIn,clientInfo.clientInfoMaxSize);
     threadBuffers[clientInfo.sessionID].readable = 1;
     
@@ -249,12 +284,15 @@ void* threadReceiver(void* server_pipe_name){
     char bufferIn[INPUT_BUFFER_SIZE];
     char opCode;
     if(mkfifo(pipename,0777) < 0){
-        exit(1);
+        fprintf(stderr, "ERROR: Server failed to create server channel.\n");
+        exit(EXIT_FAILURE);
     }
 
     int fserver = open(pipename, O_RDONLY);
     if(fserver < 0){
         //TODO struct for error, or exit(error) (algo assim)
+        fprintf(stderr, "ERROR: Server failed to open server channel.\n");
+        exit(EXIT_FAILURE);
     }
     while (1){
         readOut = read(fserver, bufferIn, INPUT_BUFFER_SIZE);
@@ -262,17 +300,30 @@ void* threadReceiver(void* server_pipe_name){
             fserver = open(pipename, O_RDONLY);
             if(fserver < 0){
                 //TODO struct for error, or exit(error) (algo assim)
+                fprintf(stderr, "ERROR: Server failed to open client channel.\n");
+                exit(EXIT_FAILURE);
             }
         } else if (readOut == -1) { //TODO, just here for debuging (maybe)
-            fprintf(stderr, "[ERR]: read failed\n");
+            fprintf(stderr, "ERROR: Server failed to read from pipe.\n");
             exit(EXIT_FAILURE);
         } else {
             memcpy(&opCode,bufferIn,sizeof(char));
             clientInfo = getClientRequestInfo(opCode,bufferIn);
             if (clientInfo.sessionID < 0){
-                //TODO: foi chamado um mount
+                clientInfo.sessionID = getAvailableSession();
+                if(clientInfo.sessionID < 0){
+                    sendUserCountFullMessage(bufferIn);
+                }else{
+                    char newBuffer[45];
+                    newBuffer[0] = opCode;
+                    memcpy(&newBuffer[1], &clientInfo.sessionID, sizeof(int));
+                    strcpy(&newBuffer[5], &bufferIn[1]);
+                    clientInfo.clientInfoMaxSize = 45;
+                    writeToBufferPC(bufferIn, clientInfo);
+                    pthread_cond_signal(&sessionsCondVars[clientInfo.sessionID]);
+                }
             } else {
-                writeInBufferPC(bufferIn, clientInfo);
+                writeToBufferPC(bufferIn, clientInfo);
                 pthread_cond_signal(&sessionsCondVars[clientInfo.sessionID]);
             }
         }
@@ -312,9 +363,8 @@ char runClientRequest(char* info){
             handleOut = handle_tfs_shutdown_after_all_closed(&info[1]);
     }
     if (handleOut < 0){
-        fprintf(stderr, "[ERR]: switch X2(%d\n", opCode);
+        fprintf(stderr, "ERROR: Failed to communicate with client.\n");
         exit(EXIT_FAILURE); 
-        //TODO decidir o que fazer nesta situacao
     }
     if (opCode == 7){
         return 1;
@@ -328,16 +378,18 @@ void* threadSender(void* id){
     char buffer[1041];
     char shutdown;
     if (pthread_mutex_lock(&(sessionsMutexes[*sessionID])) < 0){
+        fprintf(stderr, "ERROR: Internal server fatal error.\n");
+        exit(EXIT_FAILURE);
         //TODO define struct for thread return
     }
     while (1){
-        if (!threadBuffers[*sessionID].readable){
+        if (!threadBuffers[*sessionID].readable){ //espera para poder ler
             pthread_cond_wait(&sessionsCondVars[*sessionID],&sessionsMutexes[*sessionID]);
         }
         readFromBufferPC(buffer,*sessionID); 
         shutdown = runClientRequest(buffer);
         if (shutdown){
-            // sutdown after all has been done
+            // shutdown after all has been done
             break;
         }
     } 
