@@ -12,17 +12,12 @@
 typedef struct {
     char readable;
     char info[MAX_THREAD_INPUT_SIZE];
-} bufferPCPart;
-
-typedef struct {
-    bufferPCPart parts[BUFFER_PARTS];
-    char tillEmpty;
 } bufferPC;
+
 
 typedef struct {
     int sessionID;
     int clientInfoMaxSize;
-
 } clientRequestInfo;
 
 
@@ -30,7 +25,8 @@ bufferPC threadBuffers[S]; //consumer-producer buffers for every thread
 int clientsFHandle[S]; //client table
 
 
-pthread_cond_t writingCondVar;
+pthread_cond_t sessionsCondVars[S]; //TODO init a isto
+pthread_mutex_t sessionsMutexes[S]; //TODO init a isto
 pthread_mutex_t writingMutex;
 pthread_mutex_t openClientSessionMutex;
 
@@ -188,7 +184,7 @@ ssize_t handle_tfs_shutdown_after_all_closed(char* bufferIn){
     return write(fclient,bufferOut,sizeof(int));
 }
 
-clientRequestInfo* getClientRequestInfo(char opCode, char* bufferFromClient){
+clientRequestInfo getClientRequestInfo(char opCode, char* bufferFromClient){
     clientRequestInfo clientInfo;
     if (opCode==1){
         clientInfo.sessionID = -1;
@@ -210,28 +206,28 @@ clientRequestInfo* getClientRequestInfo(char opCode, char* bufferFromClient){
             case 6:
                 clientInfo.clientInfoMaxSize = 17;
                 break;
-            case 7:
+            default: // case 7
                 clientInfo.clientInfoMaxSize = 5;
-                break;
-            default:
-                return NULL;
-
         }
     }
-    return &clientInfo;
+    return clientInfo;
 }
 
+
+void writeInBufferPC(char* bufferIn, clientRequestInfo clientInfo){
+    memcpy(threadBuffers[clientInfo.sessionID].info,bufferIn,clientInfo.clientInfoMaxSize);
+    threadBuffers[clientInfo.sessionID].readable = 1;
+    
+}
 
 // código para a thread que recebe info dos clientes
 void* threadReceiver(void* server_pipe_name){
     pthread_mutex_init(&writingMutex,NULL);
     char* pipename = (char*) server_pipe_name;
-    ssize_t readOut,handleOut;
-    clientRequestInfo* clientInfo;
+    ssize_t readOut;
+    clientRequestInfo clientInfo;
     char bufferIn[INPUT_BUFFER_SIZE];
     char opCode;
-    char consmPtr[S];
-    memset(consmPtr,0,S); //TODO ma pratica?
     if(mkfifo(pipename,0777) < 0){
         exit(1);
     }
@@ -252,27 +248,78 @@ void* threadReceiver(void* server_pipe_name){
             exit(EXIT_FAILURE);
         } else {
             memcpy(&opCode,bufferIn,sizeof(char));
-            clientInfo = getClientSessionID(opCode,bufferIn);
-            /*if (clientSessionID==NULL){
-                //RETURN ERRO
-            }*/
-            if (clientInfo->sessionID < 0){
-                //TODO
+            clientInfo = getClientRequestInfo(opCode,bufferIn);
+            if (clientInfo.sessionID < 0){
+                //TODO: foi chamado um mount
             } else {
-                if (threadBuffers[clientInfo->sessionID].tillEmpty == S){ //buffer está full
-                    pthread_mutex_lock(&writingMutex);
-                    pthread_cond_wait(&writingCondVar,&writingMutex);
-                    pthread_mutex_unlock(&writingMutex);
-                } 
                 writeInBufferPC(bufferIn, clientInfo);
-
+                pthread_cond_signal(&sessionsCondVars[clientInfo.sessionID]);
             }
         }
     }
 }
 
+void readFromBufferPC(char* buffer, int sessionID){
+    memcpy(buffer,threadBuffers[sessionID].info,1041);
+    threadBuffers[sessionID].readable = 0;
+}
 
-void* threadSender(void* noArgs){
+
+
+char runClientRequest(char* info){
+    char opCode, handleOut;
+    memcpy(&opCode,info,sizeof(char));
+    switch (opCode) {
+        case 1:
+            handleOut = handle_tfs_mount(&bufferIn[1]);
+            break;
+        case 2:
+            handleOut = handle_tfs_unmount(&bufferIn[1]);
+            break;
+        case 3:
+            handleOut = handle_tfs_open(&bufferIn[1]);
+            break;
+        case 4:
+            handleOut = handle_tfs_close(&bufferIn[1]);
+            break;
+        case 5:
+            handleOut = handle_tfs_write(&bufferIn[1]);
+            break;
+        case 6:
+            handleOut = handle_tfs_read(&bufferIn[1]);
+            break;
+        default: // case 7
+            handleOut = handle_tfs_shutdown_after_all_closed(&bufferIn[1]);
+    }
+    if (handleOut < 0){
+        fprintf(stderr, "[ERR]: switch X2(%d\n", opCode);
+        exit(EXIT_FAILURE); 
+    }
+}
+
+
+
+void* threadSender(void* id){
+    int* sessionID = (int*) id;
+    char buffer[1041];
+    char shutdown;
+    if (pthread_mutex_lock(&(sessionsMutexes[*sessionID])) < 0){
+        //TODO define struct for thread return
+    }
+    while (1){
+        if (!threadBuffers[*sessionID].readable){
+            pthread_cond_wait(&sessionsCondVars[*sessionID],&sessionsMutexes[*sessionID]);
+        }
+        readFromBufferPC(buffer,*sessionID); 
+        shutdown = runClientRequest(buffer);
+        if (shutdown){
+            break;
+        }
+    } 
+    //TODO código se houver shutdown
+    if (pthread_mutex_lock(&(sessionsMutexes[*sessionID])) < 0){
+        //TODO define struct for thread return
+    }
 
 }
 
