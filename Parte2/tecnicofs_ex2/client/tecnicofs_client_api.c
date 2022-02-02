@@ -96,9 +96,9 @@ int tfs_close(int fhandle) {
     return serverResponse;
 }
 
-int tfs_write(int fhandle, void const *buffer, size_t len) {
+ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     char wBuffer[1041];
-    int serverResponse;
+    ssize_t serverResponse;
     wBuffer[0] = TFS_OP_CODE_WRITE;
     memcpy(&wBuffer[1], &session_id, sizeof(int));
     memcpy(&wBuffer[1+sizeof(int)], &fhandle, sizeof(int));
@@ -106,17 +106,17 @@ int tfs_write(int fhandle, void const *buffer, size_t len) {
     memcpy(&wBuffer[1+2*(sizeof(int))+sizeof(size_t)], buffer , len);
     if (write(fserver, wBuffer, 1041) < 0)
         return -1;
-    if (read(fclient, &serverResponse, sizeof(int)) < 0)
+    if (read(fclient, &serverResponse, sizeof(ssize_t)) < 0)
         return -1;
     return serverResponse;
 }
 
-int tfs_read(int fhandle, void *buffer, size_t len) {
+ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     char* myBuffer = (char*) buffer;
     size_t readBytesFromServer = len+sizeof(ssize_t);
     char rBuffer[readBytesFromServer]; // read info from server
     char wBuffer[17]; // write info to server  
-    int serverResponse;
+    ssize_t serverResponse;
     wBuffer[0] = TFS_OP_CODE_READ;
     memcpy(&wBuffer[1], &session_id, sizeof(int));
     memcpy(&wBuffer[1+sizeof(int)], &fhandle, sizeof(int));
@@ -125,7 +125,7 @@ int tfs_read(int fhandle, void *buffer, size_t len) {
         return -1;
     if (read(fclient, &rBuffer, readBytesFromServer) < 0)
         return -1;
-    memcpy(&serverResponse,rBuffer,sizeof(int));
+    memcpy(&serverResponse,rBuffer,sizeof(ssize_t));
     if (serverResponse>0){
         memcpy(myBuffer,&rBuffer[sizeof(ssize_t)], (size_t) serverResponse);
     } 

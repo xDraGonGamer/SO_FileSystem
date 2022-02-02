@@ -93,15 +93,24 @@ int openClientSession(char* client_pipe_name, int sessionID){
 }
 
 int getAvailableSession(){
-    pthread_mutex_lock(&openClientSessionMutex);
+    if (pthread_mutex_lock(&openClientSessionMutex) < 0){
+        fprintf(stderr,"ERROR: Mutex failed to Lock\n");
+        exit(EXIT_FAILURE);
+    }
     for(int i = 0; i < S; i++){
         if(clientsFHandle[i] < 0){
             clientsFHandle[i] = 0;
-            pthread_mutex_unlock(&openClientSessionMutex);
+            if (pthread_mutex_unlock(&openClientSessionMutex) < 0){
+                fprintf(stderr,"ERROR: Mutex failed to Unlock\n");
+                exit(EXIT_FAILURE);
+            }
             return i;
         }
     }
-    pthread_mutex_unlock(&openClientSessionMutex);
+    if (pthread_mutex_unlock(&openClientSessionMutex) < 0){
+        fprintf(stderr,"ERROR: Mutex failed to Unlock\n");
+        exit(EXIT_FAILURE);
+    }
     return -1;
 }
 
@@ -115,7 +124,7 @@ int finishClientSession(int sessionId){
 }
 
 
-char handle_tfs_mount(char *bufferIn){
+void handle_tfs_mount(char *bufferIn){
     char bufferOut[sizeof(int)];
     char client_pipe_name[40];
     int fclient, sessionID;
@@ -124,14 +133,13 @@ char handle_tfs_mount(char *bufferIn){
     fclient = openClientSession(client_pipe_name, sessionID);
     memcpy(bufferOut,&sessionID,sizeof(int));
     if (write(fclient,bufferOut,sizeof(int)) < 0){
-        return -1;
-    } return 0;
+        close(fclient);
+    } 
 }
 
-char handle_tfs_unmount(char *bufferIn){
+void handle_tfs_unmount(char *bufferIn){
     char bufferOut[sizeof(int)];
     int clientSessionID, fclient, out;
-    ssize_t ret;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
     out = 0;
     fclient = getClientFhandle(clientSessionID);
@@ -139,18 +147,11 @@ char handle_tfs_unmount(char *bufferIn){
         out = -1;
     }
     memcpy(bufferOut,&out,sizeof(int));
-    ret = write(fclient,bufferOut,sizeof(int));
-    if (ret>=0){
-        if (close(fclient)<0){
-            fprintf(stderr, "ERROR: Failed to close client channel.\n");
-            exit(EXIT_FAILURE);
-        }
-        return 0;
-    }
-    return -1;
+    write(fclient,bufferOut,sizeof(int));
+    close(fclient);
 }
 
-char handle_tfs_open(char* bufferIn){
+void handle_tfs_open(char* bufferIn){
     char bufferOut[sizeof(int)];
     char fileName[41];
     int clientSessionID, fclient, flags, out;
@@ -162,11 +163,11 @@ char handle_tfs_open(char* bufferIn){
 
     memcpy(bufferOut,&out,sizeof(int));
     if (write(fclient,bufferOut,sizeof(int)) < 0){
-        return -1;
-    } return 0;
+        close(fclient);
+    } 
 }
 
-char handle_tfs_close(char* bufferIn){
+void handle_tfs_close(char* bufferIn){
     char bufferOut[sizeof(int)];
     int clientSessionID, fclient, fhandle, out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
@@ -176,12 +177,12 @@ char handle_tfs_close(char* bufferIn){
 
     memcpy(bufferOut,&out,sizeof(int));
     if (write(fclient,bufferOut,sizeof(int)) < 0){
-        return -1;
-    } return 0;
+        close(fclient);
+    } 
 }
 
-char handle_tfs_write(char* bufferIn){
-    char bufferOut[sizeof(ssize_t)];
+void handle_tfs_write(char* bufferIn){
+    char bufferOut[sizeof(int)];
     char* toWrite;
     int clientSessionID, fclient, fhandle, out;
     size_t len;
@@ -194,28 +195,28 @@ char handle_tfs_write(char* bufferIn){
     out = (int) tfs_write(fhandle,toWrite,len);
     free(toWrite);
     memcpy(bufferOut,&out,sizeof(int));
-    if (write(fclient,bufferOut,sizeof(ssize_t)) < 0){
-        return -1;
-    } return 0;
+    if (write(fclient,bufferOut,sizeof(int)) < 0){
+        close(fclient);
+    } 
 }
 
-char handle_tfs_read(char* bufferIn){
+void handle_tfs_read(char* bufferIn){
     int clientSessionID, fclient, fhandle, out;
     size_t len;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
     fclient = clientsFHandle[clientSessionID];
     memcpy(&fhandle,&bufferIn[4],sizeof(int));
     memcpy(&len,&bufferIn[8],sizeof(size_t));
-    char bufferOut[sizeof(char)*len + sizeof(ssize_t)];
-    out = (int) tfs_read(fhandle,&bufferOut[sizeof(ssize_t)],len);
+    char bufferOut[sizeof(char)*len + sizeof(int)];
+    out = (int) tfs_read(fhandle,&bufferOut[sizeof(int)],len);
     memcpy(bufferOut,&out,sizeof(int));
-    if (write(fclient,bufferOut,sizeof(char)*len + sizeof(ssize_t)) < 0){
-        return -1;
-    } return 0;
+    if (write(fclient,bufferOut,sizeof(char)*len + sizeof(int)) < 0){
+        close(fclient);
+    } 
 }
 
 
-char handle_tfs_shutdown_after_all_closed(char* bufferIn){
+void handle_tfs_shutdown_after_all_closed(char* bufferIn){
     char bufferOut[sizeof(int)];
     int clientSessionID, fclient, out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
@@ -224,8 +225,8 @@ char handle_tfs_shutdown_after_all_closed(char* bufferIn){
 
     memcpy(bufferOut,&out,sizeof(int));
     if (write(fclient,bufferOut,sizeof(int)) < 0){
-        return -1;
-    } return 0;
+        close(fclient);
+    } 
 }
 
 clientRequestInfo getClientRequestInfo(char opCode, char* bufferFromClient){
@@ -277,7 +278,10 @@ void writeToBufferPC(char* bufferIn, clientRequestInfo clientInfo){
 
 // código para a thread que recebe info dos clientes
 void* threadReceiver(void* server_pipe_name){
-    pthread_mutex_init(&writingMutex,NULL);
+    if (pthread_mutex_init(&writingMutex,NULL) < 0){
+        fprintf(stderr, "ERROR: Failed to initialize mutex\n");
+        exit(EXIT_FAILURE);
+    }
     char* pipename = (char*) server_pipe_name;
     ssize_t readOut;
     clientRequestInfo clientInfo;
@@ -313,19 +317,21 @@ void* threadReceiver(void* server_pipe_name){
                 clientInfo.sessionID = getAvailableSession();
                 if(clientInfo.sessionID < 0){
                     sendUserCountFullMessage(bufferIn);
+                    continue;
                 }else{
                     char newBuffer[45];
                     newBuffer[0] = opCode;
                     memcpy(&newBuffer[1], &clientInfo.sessionID, sizeof(int));
                     strcpy(&newBuffer[5], &bufferIn[1]);
                     clientInfo.clientInfoMaxSize = 45;
-                    writeToBufferPC(bufferIn, clientInfo);
-                    pthread_cond_signal(&sessionsCondVars[clientInfo.sessionID]);
                 }
-            } else {
-                writeToBufferPC(bufferIn, clientInfo);
-                pthread_cond_signal(&sessionsCondVars[clientInfo.sessionID]);
             }
+            writeToBufferPC(bufferIn, clientInfo);
+            if (pthread_cond_signal(&sessionsCondVars[clientInfo.sessionID]) < 0){
+                fprintf(stderr, "ERROR: Failed to signal Conditional Variable.\n");
+                exit(EXIT_FAILURE);
+            }
+            
         }
     }
 }
@@ -338,33 +344,29 @@ void readFromBufferPC(char* buffer, int sessionID){
 
 
 char runClientRequest(char* info){
-    char opCode, handleOut;
+    char opCode;
     memcpy(&opCode,info,sizeof(char));
     switch (opCode) {
         case 1:
-            handleOut = handle_tfs_mount(&info[1]);
+            handle_tfs_mount(&info[1]);
             break;
         case 2:
-            handleOut = handle_tfs_unmount(&info[1]);
+            handle_tfs_unmount(&info[1]);
             break;
         case 3:
-            handleOut = handle_tfs_open(&info[1]);
+            handle_tfs_open(&info[1]);
             break;
         case 4:
-            handleOut = handle_tfs_close(&info[1]);
+            handle_tfs_close(&info[1]);
             break;
         case 5:
-            handleOut = handle_tfs_write(&info[1]);
+            handle_tfs_write(&info[1]);
             break;
         case 6:
-            handleOut = handle_tfs_read(&info[1]);
+            handle_tfs_read(&info[1]);
             break;
         default: // case 7
-            handleOut = handle_tfs_shutdown_after_all_closed(&info[1]);
-    }
-    if (handleOut < 0){
-        fprintf(stderr, "ERROR: Failed to communicate with client.\n");
-        exit(EXIT_FAILURE); 
+            handle_tfs_shutdown_after_all_closed(&info[1]);
     }
     if (opCode == 7){
         return 1;
@@ -384,7 +386,10 @@ void* threadSender(void* id){
     }
     while (1){
         if (!threadBuffers[*sessionID].readable){ //espera para poder ler
-            pthread_cond_wait(&sessionsCondVars[*sessionID],&sessionsMutexes[*sessionID]);
+            if (pthread_cond_wait(&sessionsCondVars[*sessionID],&sessionsMutexes[*sessionID]) < 0){
+                fprintf(stderr, "ERROR: Conditional Variable failed to wait.\n");
+                exit(EXIT_FAILURE);
+            }
         }
         readFromBufferPC(buffer,*sessionID); 
         shutdown = runClientRequest(buffer);
@@ -393,10 +398,6 @@ void* threadSender(void* id){
             break;
         }
     } 
-    //TODO código se houver shutdown
-    if (pthread_mutex_unlock(&(sessionsMutexes[*sessionID])) < 0){
-        //TODO define struct for thread return
-    }
     exit(0); // isto dá exit ao programa todo
 
 }

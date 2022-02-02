@@ -60,7 +60,7 @@ int tfs_close(int fhandle);
  * Returns the number of bytes that were written (can be lower than
  * 'len' if the maximum file size is exceeded), or -1 in case of error.
  */
-int tfs_write(int fhandle, void const *buffer, size_t len);
+ssize_t tfs_write(int fhandle, void const *buffer, size_t len);
 
 /* Reads from an open file, starting at the current offset
  * * Input:
@@ -72,7 +72,7 @@ int tfs_write(int fhandle, void const *buffer, size_t len);
  * (can be lower than 'len' if the file size was reached), or -1 in case of
  * error.
  */
-int tfs_read(int fhandle, void *buffer, size_t len);
+ssize_t tfs_read(int fhandle, void *buffer, size_t len);
 
 /*
  * Orders TecnicoFS server to wait until no file is open and then shutdown
