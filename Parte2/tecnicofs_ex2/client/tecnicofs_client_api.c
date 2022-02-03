@@ -17,7 +17,6 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     buffer[0] = (char) TFS_OP_CODE_MOUNT;
     buffer[1] = '\0';
     strcpy(cpath, client_pipe_path);
-
     if(mkfifo(client_pipe_path, 0777) < 0){
         return -1;
     }
@@ -43,6 +42,7 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
         unlink(client_pipe_path);
         return -1;
     }
+    printf("session ID = %d, just mounted with pointer \n",session_id);
     if(session_id == -1){
         close(fclient);
         close(fserver);
@@ -98,7 +98,7 @@ int tfs_close(int fhandle) {
 
 ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     char wBuffer[1041];
-    ssize_t serverResponse;
+    int serverResponse;
     wBuffer[0] = TFS_OP_CODE_WRITE;
     memcpy(&wBuffer[1], &session_id, sizeof(int));
     memcpy(&wBuffer[1+sizeof(int)], &fhandle, sizeof(int));
@@ -106,17 +106,17 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     memcpy(&wBuffer[1+2*(sizeof(int))+sizeof(size_t)], buffer , len);
     if (write(fserver, wBuffer, 1041) < 0)
         return -1;
-    if (read(fclient, &serverResponse, sizeof(ssize_t)) < 0)
+    if (read(fclient, &serverResponse, sizeof(int)) < 0)
         return -1;
-    return serverResponse;
+    return (ssize_t) serverResponse;
 }
 
 ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     char* myBuffer = (char*) buffer;
-    size_t readBytesFromServer = len+sizeof(ssize_t);
+    size_t readBytesFromServer = len+sizeof(int);
     char rBuffer[readBytesFromServer]; // read info from server
     char wBuffer[17]; // write info to server  
-    ssize_t serverResponse;
+    int serverResponse;
     wBuffer[0] = TFS_OP_CODE_READ;
     memcpy(&wBuffer[1], &session_id, sizeof(int));
     memcpy(&wBuffer[1+sizeof(int)], &fhandle, sizeof(int));
@@ -125,11 +125,11 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         return -1;
     if (read(fclient, &rBuffer, readBytesFromServer) < 0)
         return -1;
-    memcpy(&serverResponse,rBuffer,sizeof(ssize_t));
+    memcpy(&serverResponse,rBuffer,sizeof(int));
     if (serverResponse>0){
-        memcpy(myBuffer,&rBuffer[sizeof(ssize_t)], (size_t) serverResponse);
+        memcpy(myBuffer,&rBuffer[sizeof(int)], (size_t) serverResponse);
     } 
-    return serverResponse;
+    return (ssize_t) serverResponse;
 }
 
 int tfs_shutdown_after_all_closed() {

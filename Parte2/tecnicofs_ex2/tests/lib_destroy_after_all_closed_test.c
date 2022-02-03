@@ -10,7 +10,7 @@
     as a standalone server.
     We recommend trying more elaborate tests of tfs_destroy_after_all_closed.
     Also, we suggest trying out a similar test once the
-    client-server version is ready (calling the tfs_shutdown_after_all_closed 
+    client-server version is ready (calling the tfs_shutdown_after_all_closed
     operation).
 */
 
@@ -21,7 +21,7 @@ void *fn_thread(void *arg) {
     (void)
         arg; /* Since arg is not used, this line prevents a compiler warning */
 
-    sleep(3);
+    sleep(10);
 
     /* set *before* closing the file, so that it is set before
        tfs_destroy_after_all_close returns in the main thread
@@ -29,6 +29,7 @@ void *fn_thread(void *arg) {
     closed_file = 1;
 
     assert(tfs_close(f) != -1);
+
     return NULL;
 }
 

@@ -11,7 +11,7 @@
 
 typedef struct {
     char readable;
-    char info[MAX_THREAD_INPUT_SIZE];
+    char* info;
 } bufferPC;
 
 
@@ -19,6 +19,11 @@ typedef struct {
     int sessionID;
     size_t clientInfoMaxSize;
 } clientRequestInfo;
+
+typedef struct {
+    int sessionID;
+    char* server_pipe_name;
+} sender_t;
 
 
 bufferPC threadBuffers[S]; //consumer-producer buffers for every thread
@@ -30,7 +35,15 @@ pthread_mutex_t sessionsMutexes[S];
 pthread_mutex_t writingMutex;
 pthread_mutex_t openClientSessionMutex;
 
-
+char initPCBuffers(){
+    for (int i=0;i<S;i++){
+        threadBuffers[i].info = (char*) malloc(sizeof(char)*MAX_THREAD_INPUT_SIZE);
+        if (threadBuffers[i].info == NULL){
+            return -1;
+        }
+    }
+    return 0;
+}
 
 char initPthreadVars(){
     for (int i=0; i<S; i++){
@@ -49,6 +62,14 @@ void initClientsFHandle(){
     }
 }
 
+void closeClientsFHandle(){
+    for (int i=0; i<S; i++){
+        if (clientsFHandle[i]>=0){
+            close(clientsFHandle[i]);
+        }
+    }
+}
+
 int getClientFhandle(int sessionId){
     if (sessionId >= S){
         return -1;
@@ -57,35 +78,14 @@ int getClientFhandle(int sessionId){
     }
 }
 
-/*int openClientSession(char* client_pipe_name, int* fhandle){
-    // maybe lock? TODO
-    pthread_mutex_lock(&openClientSessionMutex);
-    for (int i=0; i<S; i++){
-        if (clientsFHandle[i]<0){
-            *fhandle = open(client_pipe_name,O_WRONLY); //abre se o pipe
-            if (*fhandle >= 0){
-                clientsFHandle[i] = *fhandle;
-                pthread_mutex_unlock(&openClientSessionMutex);
-                return i;
-            } else {
-                fprintf(stderr, "ERROR: Server failed to open client pipe.\n");
-                exit(EXIT_FAILURE);
-            }
-        }
-    }
-    pthread_mutex_unlock(&openClientSessionMutex);
-    *fhandle = open(client_pipe_name,O_WRONLY); //ver isto depois
-    return -1;
-} */
 
 int openClientSession(char* client_pipe_name, int sessionID){
-
     int fhandle = open(client_pipe_name,O_WRONLY);
     if (fhandle >= 0){
         clientsFHandle[sessionID] = fhandle;
         return fhandle;
     } else {
-        fprintf(stderr, "ERROR: Server failed to open client pipe.\n");
+        fprintf(stderr, "ERROR: open client write channel.\n");
         exit(EXIT_FAILURE);
     }
     
@@ -98,8 +98,8 @@ int getAvailableSession(){
         exit(EXIT_FAILURE);
     }
     for(int i = 0; i < S; i++){
-        if(clientsFHandle[i] < 0){
-            clientsFHandle[i] = 0;
+        if(clientsFHandle[i] == -1){
+            clientsFHandle[i] = -2;
             if (pthread_mutex_unlock(&openClientSessionMutex) < 0){
                 fprintf(stderr,"ERROR: Mutex failed to Unlock\n");
                 exit(EXIT_FAILURE);
@@ -128,8 +128,8 @@ void handle_tfs_mount(char *bufferIn){
     char bufferOut[sizeof(int)];
     char client_pipe_name[40];
     int fclient, sessionID;
-    memcpy(&sessionID, &bufferIn[1], sizeof(int));
-    strcpy(client_pipe_name,&bufferIn[5]);
+    memcpy(&sessionID, bufferIn, sizeof(int));
+    strcpy(client_pipe_name,&bufferIn[4]);
     fclient = openClientSession(client_pipe_name, sessionID);
     memcpy(bufferOut,&sessionID,sizeof(int));
     if (write(fclient,bufferOut,sizeof(int)) < 0){
@@ -147,8 +147,11 @@ void handle_tfs_unmount(char *bufferIn){
         out = -1;
     }
     memcpy(bufferOut,&out,sizeof(int));
-    write(fclient,bufferOut,sizeof(int));
-    close(fclient);
+    if (write(fclient,bufferOut,sizeof(int)) < 0){
+        close(fclient);
+    } else {
+        close(fclient);
+    }
 }
 
 void handle_tfs_open(char* bufferIn){
@@ -288,7 +291,7 @@ void* threadReceiver(void* server_pipe_name){
     char bufferIn[INPUT_BUFFER_SIZE];
     char opCode;
     if(mkfifo(pipename,0777) < 0){
-        fprintf(stderr, "ERROR: Server failed to create server channel.\n");
+        fprintf(stderr, "ERROR: while creating server channel.\n");
         exit(EXIT_FAILURE);
     }
 
@@ -304,7 +307,7 @@ void* threadReceiver(void* server_pipe_name){
             fserver = open(pipename, O_RDONLY);
             if(fserver < 0){
                 //TODO struct for error, or exit(error) (algo assim)
-                fprintf(stderr, "ERROR: Server failed to open client channel.\n");
+                fprintf(stderr, "ERROR: Server failed to open client read channel.\n");
                 exit(EXIT_FAILURE);
             }
         } else if (readOut == -1) { //TODO, just here for debuging (maybe)
@@ -324,9 +327,11 @@ void* threadReceiver(void* server_pipe_name){
                     memcpy(&newBuffer[1], &clientInfo.sessionID, sizeof(int));
                     strcpy(&newBuffer[5], &bufferIn[1]);
                     clientInfo.clientInfoMaxSize = 45;
+                    writeToBufferPC(newBuffer, clientInfo);
                 }
-            }
-            writeToBufferPC(bufferIn, clientInfo);
+            } else {   
+                writeToBufferPC(bufferIn, clientInfo);
+            }       
             if (pthread_cond_signal(&sessionsCondVars[clientInfo.sessionID]) < 0){
                 fprintf(stderr, "ERROR: Failed to signal Conditional Variable.\n");
                 exit(EXIT_FAILURE);
@@ -375,29 +380,32 @@ char runClientRequest(char* info){
 
 
 
-void* threadSender(void* id){
-    int* sessionID = (int*) id;
+void* threadSender(void* arg){
+    sender_t* info = (sender_t*) arg;
+    int sessionID = info->sessionID;
     char buffer[1041];
     char shutdown;
-    if (pthread_mutex_lock(&(sessionsMutexes[*sessionID])) < 0){
+    if (pthread_mutex_lock(&(sessionsMutexes[sessionID])) < 0){
         fprintf(stderr, "ERROR: Internal server fatal error.\n");
         exit(EXIT_FAILURE);
         //TODO define struct for thread return
     }
     while (1){
-        if (!threadBuffers[*sessionID].readable){ //espera para poder ler
-            if (pthread_cond_wait(&sessionsCondVars[*sessionID],&sessionsMutexes[*sessionID]) < 0){
+        if (!threadBuffers[sessionID].readable){ //espera para poder ler
+            if (pthread_cond_wait(&sessionsCondVars[sessionID],&sessionsMutexes[sessionID]) < 0){
                 fprintf(stderr, "ERROR: Conditional Variable failed to wait.\n");
                 exit(EXIT_FAILURE);
             }
         }
-        readFromBufferPC(buffer,*sessionID); 
+        readFromBufferPC(buffer,sessionID); 
         shutdown = runClientRequest(buffer);
         if (shutdown){
             // shutdown after all has been done
             break;
         }
-    } 
+    }
+    closeClientsFHandle();
+    unlink(info->server_pipe_name);
     exit(0); // isto dá exit ao programa todo
 
 }
@@ -410,6 +418,11 @@ int main(int argc, char **argv) {
         return -1;
     }
     initClientsFHandle();
+    if (initPCBuffers() < 0){
+        return -1;
+    }
+    sender_t senderArgs[S];
+
     if (tfs_init()<0){
         return -1;
     }
@@ -421,13 +434,29 @@ int main(int argc, char **argv) {
     char *pipename = argv[1];
     printf("Starting TecnicoFS server with pipe called %s\n", pipename);
 
-    if (pthread_create(&tid[S],0,threadReceiver,pipename) < 0)
+    if (pthread_create(&tid[S],0,threadReceiver,pipename) < 0){
+        unlink(pipename);
         return -1;
+    }
+
     for (int i=0; i<S; i++){
-        if (pthread_create(&tid[i],0,threadSender,NULL) < 0)
-            return -1; 
+        senderArgs[i].server_pipe_name = pipename;
+        senderArgs[i].sessionID = i; 
+        if (pthread_create(&tid[i],0,threadSender,&(senderArgs[i])) < 0){
+           unlink(pipename);
+           //TODO verificar se aqui tambem damos close ao fd
+           return -1; 
+        }
     }
     
+    for (int i=0 ; i<(S+1) ; i++){
+        if (pthread_join(tid[i], NULL) < 0){
+            unlink(pipename);
+            return -1;
+        }
+    }    
+    
+    unlink(pipename);
     return 0;
 }
 

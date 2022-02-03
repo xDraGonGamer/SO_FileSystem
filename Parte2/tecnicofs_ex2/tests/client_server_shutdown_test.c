@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 
     run_close_function(argv[1], 0);
 
-    for (int i = 0; i < CLIENT_COUNT; ++i) {
+    for (int i = 1; i < CLIENT_COUNT; ++i) {
         int result;
         waitpid(child_pids[i], &result, 0);
         assert(WIFEXITED(result));
@@ -87,8 +87,6 @@ void run_test(char *server_pipe, int client_id) {
     assert(strcmp(buffer, str) == 0);
 
     assert(tfs_close(f) != -1);
-
-    assert(tfs_unmount() == 0);
 }
 
 void run_close_function(char *server_pipe, int client_id) {
