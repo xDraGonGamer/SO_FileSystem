@@ -22,27 +22,32 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     }
 
     if ((fserver = open(server_pipe_path, O_WRONLY)) < 0){
+        printf("joao1\n");
         unlink(client_pipe_path);
         return -1; //abre se o pipe de entrada de comunicacao do servidor
     }
     strcat(buffer, client_pipe_path);
     if (write(fserver, buffer, 41) < 0){
+        printf("joao2\n");
         close(fserver);
         unlink(client_pipe_path);
         return -1;
     }
     if ((fclient = open(client_pipe_path, O_RDONLY)) < 0){
+        printf("joao3\n");
         close(fserver);
         unlink(client_pipe_path);
         return -1; //abre se o pipe de entrada de comunicacao do cliente
     }
     if (read(fclient, &session_id, sizeof(int)) < 0){
+        printf("joao4\n");
         close(fclient);
         close(fserver);
         unlink(client_pipe_path);
         return -1;
     }
     if(session_id == -1){
+        printf("joao5\n");
         close(fclient);
         close(fserver);
         unlink(client_pipe_path);

@@ -4,7 +4,6 @@
 #include "common/common.h"
 #include <sys/types.h>
 
-#define S (1)
 
 /*
  * Establishes a session with a TecnicoFS server.

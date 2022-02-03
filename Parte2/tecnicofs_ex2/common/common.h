@@ -1,6 +1,6 @@
 #ifndef COMMON_H
 #define COMMON_H
-#define S (1)
+#define S (20)
 
 /* tfs_open flags */
 enum {
