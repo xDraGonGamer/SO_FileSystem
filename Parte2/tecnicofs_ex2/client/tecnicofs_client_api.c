@@ -42,7 +42,6 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
         unlink(client_pipe_path);
         return -1;
     }
-    printf("session ID = %d, just mounted with pointer \n",session_id);
     if(session_id == -1){
         close(fclient);
         close(fserver);
