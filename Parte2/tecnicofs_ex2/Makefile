@@ -21,11 +21,13 @@ TARGET_EXECS := fs/tfs_server tests/lib_destroy_after_all_closed_test tests/clie
 vpath # clears VPATH
 vpath %.h $(INCLUDE_DIRS)
 
+LDFLAGS = -pthread -fsanitize=thread
+
 CFLAGS = -std=c11 -D_POSIX_C_SOURCE=200809L
 CFLAGS += $(INCLUDES)
 
 # Warnings
-CFLAGS += -fdiagnostics-color=always -Wall -Wextra -Wcast-align -Wconversion -Wfloat-equal -Wformat=2 -Wnull-dereference -Wshadow -Wsign-conversion -Wswitch-default -Wswitch-enum -Wundef -Wunreachable-code -Wunused
+CFLAGS += -fdiagnostics-color=always -Wall -fsanitize=thread -Wextra -Wcast-align -Wconversion -Wfloat-equal -Wformat=2 -Wnull-dereference -Wshadow -Wsign-conversion -Wswitch-default -Wswitch-enum -Wundef -Wunreachable-code -Wunused
 # Warning suppressions
 CFLAGS += -Wno-sign-compare
 
@@ -40,8 +42,6 @@ ifeq ($(strip $(OPTIM)), no)
 else
   CFLAGS += -O3
 endif
-
-LDFLAGS = -pthread
 
 # A phony target is one that is not really the name of a file
 # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html

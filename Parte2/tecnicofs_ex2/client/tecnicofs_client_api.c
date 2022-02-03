@@ -22,32 +22,28 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     }
 
     if ((fserver = open(server_pipe_path, O_WRONLY)) < 0){
-        printf("joao1\n");
         unlink(client_pipe_path);
         return -1; //abre se o pipe de entrada de comunicacao do servidor
     }
     strcat(buffer, client_pipe_path);
     if (write(fserver, buffer, 41) < 0){
-        printf("joao2\n");
         close(fserver);
         unlink(client_pipe_path);
         return -1;
     }
     if ((fclient = open(client_pipe_path, O_RDONLY)) < 0){
-        printf("joao3\n");
         close(fserver);
         unlink(client_pipe_path);
         return -1; //abre se o pipe de entrada de comunicacao do cliente
     }
     if (read(fclient, &session_id, sizeof(int)) < 0){
-        printf("joao4\n");
         close(fclient);
         close(fserver);
         unlink(client_pipe_path);
         return -1;
     }
+    printf("got sessionid= %d\n", session_id);
     if(session_id == -1){
-        printf("joao5\n");
         close(fclient);
         close(fserver);
         unlink(client_pipe_path);
@@ -57,19 +53,25 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
 }
 
 int tfs_unmount() {
+    //printf("sessionid:  %d\tbegin\n", session_id);
     char buffer[5];
     int serverResponse;
     buffer[0] = TFS_OP_CODE_UNMOUNT;
     memcpy(&buffer[1], &session_id, sizeof(int));
-    if (write(fserver, buffer, 41) < 0)
+    if (write(fserver, buffer, 41) < 0){
+        //printf("sessionid:  %d\tend1\n", session_id);
         return -1;
-    if (read(fclient, &serverResponse, sizeof(int)) < 0)
+    }
+    if (read(fclient, &serverResponse, sizeof(int)) < 0){
+        //printf("sessionid:  %d\tend2\n", session_id);
         return -1;
+    }
     if (serverResponse>=0){
         close(fclient);
         close(fserver);
         unlink(cpath);
     }
+    //printf("sessionid:  %d\tend3\n", session_id);
     return serverResponse;
 }
 

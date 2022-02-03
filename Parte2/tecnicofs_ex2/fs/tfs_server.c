@@ -3,6 +3,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <signal.h>
 
 #define INPUT_BUFFER_SIZE 1041 //buffer for info from client
 #define MAX_THREAD_INPUT_SIZE 2000 //TODO
@@ -31,8 +32,7 @@ int clientsFHandle[S]; //client table
 
 
 pthread_cond_t sessionsCondVars[S];
-pthread_mutex_t sessionsMutexes[S]; 
-pthread_mutex_t writingMutex;
+pthread_mutex_t sessionsMutexes[S];
 pthread_mutex_t openClientSessionMutex;
 
 char initPCBuffers(){
@@ -55,20 +55,16 @@ char initPthreadVars(){
     return 0;
 }
 
-void initClientsFHandle(){
-    pthread_mutex_init(&openClientSessionMutex, NULL);
+char initClientsFHandle(){
+    if(pthread_mutex_init(&openClientSessionMutex, NULL) < 0){
+        return -1;
+    }
     for (int i=0; i<S; i++){
         clientsFHandle[i] = -1;
     }
+    return 0;
 }
 
-void closeClientsFHandle(){
-    for (int i=0; i<S; i++){
-        if (clientsFHandle[i]>=0){
-            close(clientsFHandle[i]);
-        }
-    }
-}
 
 int getClientFhandle(int sessionId){
     if (sessionId >= S){
@@ -82,7 +78,9 @@ int getClientFhandle(int sessionId){
 int openClientSession(char* client_pipe_name, int sessionID){
     int fhandle = open(client_pipe_name,O_WRONLY);
     if (fhandle >= 0){
+        pthread_mutex_lock(&openClientSessionMutex);
         clientsFHandle[sessionID] = fhandle;
+        pthread_mutex_unlock(&openClientSessionMutex);
         return fhandle;
     } else {
         fprintf(stderr, "ERROR: open client write channel.\n");
@@ -118,9 +116,10 @@ int finishClientSession(int sessionId){
     if (sessionId >= S){
         return -1;
     }
+    pthread_mutex_lock(&openClientSessionMutex);
     clientsFHandle[sessionId] = -1;
+    pthread_mutex_unlock(&openClientSessionMutex);
     return 0;
-
 }
 
 
@@ -138,20 +137,26 @@ void handle_tfs_mount(char *bufferIn){
 }
 
 void handle_tfs_unmount(char *bufferIn){
+    printf("joao1\n");
     char bufferOut[sizeof(int)];
     int clientSessionID, fclient, out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
+    printf("writing sessionid = %d\n", clientSessionID);
     out = 0;
-    fclient = getClientFhandle(clientSessionID);
+    fclient = getClientFhandle(clientSessionID); //talvez
+    //printf("joao2\n");
     if (fclient<0 || finishClientSession(clientSessionID)<0){
         out = -1;
     }
+    //printf("joao3\n");
     memcpy(bufferOut,&out,sizeof(int));
+    //printf("joao4\n");
     if (write(fclient,bufferOut,sizeof(int)) < 0){
         close(fclient);
     } else {
         close(fclient);
     }
+    printf("joao5\n");
 }
 
 void handle_tfs_open(char* bufferIn){
@@ -274,17 +279,14 @@ void sendUserCountFullMessage(char* bufferIn){
 
 
 void writeToBufferPC(char* bufferIn, clientRequestInfo clientInfo){
+    pthread_mutex_lock(&sessionsMutexes[clientInfo.sessionID]);
     memcpy(threadBuffers[clientInfo.sessionID].info,bufferIn,clientInfo.clientInfoMaxSize);
     threadBuffers[clientInfo.sessionID].readable = 1;
-    
+    pthread_mutex_unlock(&sessionsMutexes[clientInfo.sessionID]);
 }
 
 // código para a thread que recebe info dos clientes
 void* threadReceiver(void* server_pipe_name){
-    if (pthread_mutex_init(&writingMutex,NULL) < 0){
-        fprintf(stderr, "ERROR: Failed to initialize mutex\n");
-        exit(EXIT_FAILURE);
-    }
     char* pipename = (char*) server_pipe_name;
     ssize_t readOut;
     clientRequestInfo clientInfo;
@@ -404,7 +406,6 @@ void* threadSender(void* arg){
             break;
         }
     }
-    closeClientsFHandle();
     unlink(info->server_pipe_name);
     exit(0); // isto dá exit ao programa todo
 
@@ -417,7 +418,9 @@ int main(int argc, char **argv) {
     if (initPthreadVars() < 0){
         return -1;
     }
-    initClientsFHandle();
+    if(initClientsFHandle() < 0){
+        return -1;
+    }
     if (initPCBuffers() < 0){
         return -1;
     }
@@ -430,7 +433,9 @@ int main(int argc, char **argv) {
         printf("Please specify the pathname of the server's pipe.\n");
         return 1;
     }
-
+    if(signal(SIGPIPE, SIG_IGN) == SIG_ERR){
+        return-1;
+    }
     char *pipename = argv[1];
     printf("Starting TecnicoFS server with pipe called %s\n", pipename);
 
@@ -459,49 +464,3 @@ int main(int argc, char **argv) {
     unlink(pipename);
     return 0;
 }
-
-
-/*int tfs_server_mount(char* joao){
-
-    if(clientCount < S){
-        
-    }
-    return -1;
-
-} TODO check if needed*/ 
-
-/*
-switch (opCode)
-            {
-            case 1:
-                handleOut = handle_tfs_mount(&bufferIn[1]);
-                break;
-            case 2:
-                handleOut = handle_tfs_unmount(&bufferIn[1]);
-                break;
-            case 3:
-                handleOut = handle_tfs_open(&bufferIn[1]);
-                break;
-            case 4:
-                handleOut = handle_tfs_close(&bufferIn[1]);
-                break;
-            case 5:
-                handleOut = handle_tfs_write(&bufferIn[1]);
-                break;
-            case 6:
-                handleOut = handle_tfs_read(&bufferIn[1]);
-                break;
-            case 7:
-                handleOut = handle_tfs_shutdown_after_all_closed(&bufferIn[1]);
-                break;
-            default:
-                fprintf(stderr, "[ERR]: switch X1(, %d\n", opCode);
-                exit(EXIT_FAILURE);
-            }
-
-            if (handleOut < 0){
-                fprintf(stderr, "[ERR]: switch X2(%d\n", opCode);
-                exit(EXIT_FAILURE); 
-            }
-        }
-*/
