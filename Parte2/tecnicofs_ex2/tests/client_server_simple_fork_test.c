@@ -62,13 +62,9 @@ void run_test(char *server_pipe, int client_id) {
     assert(tfs_mount(client_pipe, server_pipe) == 0);
 
     f = tfs_open(path, TFS_O_CREAT);
-    printf("opening one child, with id = %d\n",client_id);
     assert(f != -1);
 
     r = tfs_write(f, str, strlen(str));
-    if (r!=strlen(str)){
-        printf("client ID = %d\n",client_id);
-    }
     assert(r == strlen(str));
 
     assert(tfs_close(f) != -1);
@@ -76,7 +72,6 @@ void run_test(char *server_pipe, int client_id) {
     f = tfs_open(path, 0);
     assert(f != -1);
 
-    printf("open-read\n");
 
     r = tfs_read(f, buffer, sizeof(buffer) - 1);
     assert(r == strlen(str));
@@ -86,8 +81,6 @@ void run_test(char *server_pipe, int client_id) {
     assert(strcmp(buffer, str) == 0);
 
     assert(tfs_close(f) != -1);
-
-    printf("un-close\n");
 
     assert(tfs_unmount() == 0);
 }

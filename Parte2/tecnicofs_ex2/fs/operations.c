@@ -159,7 +159,6 @@ static ssize_t _tfs_write_unsynchronized(int fhandle, void const *buffer,
     if (file == NULL) {
         return -1;
     }
-
     /* From the open file table entry, we get the inode */
     inode_t *inode = inode_get(file->of_inumber);
     if (inode == NULL) {
@@ -170,7 +169,6 @@ static ssize_t _tfs_write_unsynchronized(int fhandle, void const *buffer,
     if (to_write + file->of_offset > BLOCK_SIZE) {
         to_write = BLOCK_SIZE - file->of_offset;
     }
-
     if (to_write > 0) {
         if (inode->i_size == 0) {
             /* If empty file, allocate new block */

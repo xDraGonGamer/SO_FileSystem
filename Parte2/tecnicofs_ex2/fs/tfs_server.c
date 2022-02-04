@@ -131,32 +131,32 @@ void handle_tfs_mount(char *bufferIn){
     strcpy(client_pipe_name,&bufferIn[4]);
     fclient = openClientSession(client_pipe_name, sessionID);
     memcpy(bufferOut,&sessionID,sizeof(int));
-    if (write(fclient,bufferOut,sizeof(int)) < 0){
+    if (write(fclient,bufferOut,sizeof(int)) < 0 ){
+        if (finishClientSession(sessionID) < 0){
+            fprintf(stderr,"ERROR: Invalid sessionID detected\n");
+        }
         close(fclient);
     } 
 }
 
 void handle_tfs_unmount(char *bufferIn){
-    printf("joao1\n");
     char bufferOut[sizeof(int)];
     int clientSessionID, fclient, out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
-    printf("writing sessionid = %d\n", clientSessionID);
     out = 0;
     fclient = getClientFhandle(clientSessionID); //talvez
-    //printf("joao2\n");
     if (fclient<0 || finishClientSession(clientSessionID)<0){
         out = -1;
     }
-    //printf("joao3\n");
     memcpy(bufferOut,&out,sizeof(int));
-    //printf("joao4\n");
     if (write(fclient,bufferOut,sizeof(int)) < 0){
         close(fclient);
     } else {
         close(fclient);
     }
-    printf("joao5\n");
+    if (finishClientSession(clientSessionID) < 0){
+        fprintf(stderr,"ERROR: Invalid sessionID detected\n");
+    }
 }
 
 void handle_tfs_open(char* bufferIn){
@@ -171,6 +171,9 @@ void handle_tfs_open(char* bufferIn){
 
     memcpy(bufferOut,&out,sizeof(int));
     if (write(fclient,bufferOut,sizeof(int)) < 0){
+        if (finishClientSession(clientSessionID) < 0){
+            fprintf(stderr,"ERROR: Invalid sessionID detected\n");
+        }
         close(fclient);
     } 
 }
@@ -185,6 +188,9 @@ void handle_tfs_close(char* bufferIn){
 
     memcpy(bufferOut,&out,sizeof(int));
     if (write(fclient,bufferOut,sizeof(int)) < 0){
+        if (finishClientSession(clientSessionID) < 0){
+            fprintf(stderr,"ERROR: Invalid sessionID detected\n");
+        }
         close(fclient);
     } 
 }
@@ -204,6 +210,9 @@ void handle_tfs_write(char* bufferIn){
     free(toWrite);
     memcpy(bufferOut,&out,sizeof(int));
     if (write(fclient,bufferOut,sizeof(int)) < 0){
+        if (finishClientSession(clientSessionID) < 0){
+            fprintf(stderr,"ERROR: Invalid sessionID detected\n");
+        }
         close(fclient);
     } 
 }
@@ -219,6 +228,9 @@ void handle_tfs_read(char* bufferIn){
     out = (int) tfs_read(fhandle,&bufferOut[sizeof(int)],len);
     memcpy(bufferOut,&out,sizeof(int));
     if (write(fclient,bufferOut,sizeof(char)*len + sizeof(int)) < 0){
+        if (finishClientSession(clientSessionID) < 0){
+            fprintf(stderr,"ERROR: Invalid sessionID detected\n");
+        }
         close(fclient);
     } 
 }
@@ -233,6 +245,9 @@ void handle_tfs_shutdown_after_all_closed(char* bufferIn){
 
     memcpy(bufferOut,&out,sizeof(int));
     if (write(fclient,bufferOut,sizeof(int)) < 0){
+        if (finishClientSession(clientSessionID) < 0){
+            fprintf(stderr,"ERROR: Invalid sessionID detected\n");
+        }
         close(fclient);
     } 
 }
@@ -317,6 +332,12 @@ void* threadReceiver(void* server_pipe_name){
             exit(EXIT_FAILURE);
         } else {
             memcpy(&opCode,bufferIn,sizeof(char));
+            if (!opCode){
+                printf("OPCODE IS 0\n");
+                for (int i=0; i<1041; i++){
+                    printf("%c, ",bufferIn[i]);
+                }printf("\n");
+            }
             clientInfo = getClientRequestInfo(opCode,bufferIn);
             if (clientInfo.sessionID < 0){
                 clientInfo.sessionID = getAvailableSession();
@@ -373,6 +394,7 @@ char runClientRequest(char* info){
             handle_tfs_read(&info[1]);
             break;
         default: // case 7
+            printf("opCode is %d\n",opCode);
             handle_tfs_shutdown_after_all_closed(&info[1]);
     }
     if (opCode == 7){
