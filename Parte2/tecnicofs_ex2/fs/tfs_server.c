@@ -12,7 +12,7 @@
 
 typedef struct {
     char readable;
-    char* info;
+    char info[MAX_THREAD_INPUT_SIZE];
 } bufferPC;
 
 
@@ -43,10 +43,7 @@ clientRequestInfo nullClientInfo(){
 
 char initPCBuffers(){
     for (int i=0;i<S;i++){
-        threadBuffers[i].info = (char*) malloc(sizeof(char)*MAX_THREAD_INPUT_SIZE);
-        if (threadBuffers[i].info == NULL){
-            return -1;
-        }
+        threadBuffers[i].readable = 0;
     }
     return 0;
 }
@@ -54,17 +51,17 @@ char initPCBuffers(){
 char initPthreadVars(){
     for (int i=0; i<S; i++){
         if ( (pthread_cond_init(&sessionsCondVars[i],NULL) < 0)
-        || (pthread_mutex_init(&sessionsMutexes[i],NULL) < 0) ){
+        || (pthread_mutex_init(&sessionsMutexes[i],NULL) < 0)){
             return -1;
         }
+    }
+    if(pthread_mutex_init(&openClientSessionMutex, NULL) < 0){
+        return -1;
     }
     return 0;
 }
 
 char initClientsFHandle(){
-    if(pthread_mutex_init(&openClientSessionMutex, NULL) < 0){
-        return -1;
-    }
     for (int i=0; i<S; i++){
         clientsFHandle[i] = -1;
     }
@@ -158,7 +155,7 @@ void handle_tfs_unmount(char *bufferIn){
     int clientSessionID, fclient, out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
     out = 0;
-    fclient = getClientFhandle(clientSessionID); //talvez
+    fclient = getClientFhandle(clientSessionID);
     if (fclient<0 || finishClientSession(clientSessionID)<0){
         out = -1;
     }
@@ -247,7 +244,7 @@ void handle_tfs_read(char* bufferIn){
             fprintf(stderr,"ERROR: Invalid sessionID detected\n");
         }
         close(fclient);
-    } 
+    }
 }
 
 
@@ -370,7 +367,6 @@ void* threadReceiver(void* server_pipe_name){
 
     int fserver = open(pipename, O_RDONLY);
     if(fserver < 0){
-        //TODO struct for error, or exit(error) (algo assim)
         fprintf(stderr, "ERROR: Server failed to open server channel.\n");
         exit(EXIT_FAILURE);
     }
@@ -379,7 +375,6 @@ void* threadReceiver(void* server_pipe_name){
             !getClientInfoMaxSize(opCode,&bytesToRead,1) &&
             !readFromPipe(pipename,fserver,&bufferIn[1],bytesToRead)) { 
             bufferIn[0] = opCode;
-            //APAGAR_FN(bufferIn);
             clientInfo = getClientRequestInfo(opCode,bufferIn);
             if (clientInfo.sessionID < 0){
                 clientInfo.sessionID = getAvailableSession();
@@ -455,7 +450,6 @@ void* threadSender(void* arg){
     if (pthread_mutex_lock(&(sessionsMutexes[sessionID])) < 0){
         fprintf(stderr, "ERROR: Internal server fatal error.\n");
         exit(EXIT_FAILURE);
-        //TODO define struct for thread return
     }
     while (1){
         if (!threadBuffers[sessionID].readable){ //espera para poder ler
@@ -472,7 +466,7 @@ void* threadSender(void* arg){
         }
     }
     unlink(info->server_pipe_name);
-    exit(0); // isto dá exit ao programa todo
+    exit(0);
 
 }
 
@@ -480,24 +474,10 @@ void* threadSender(void* arg){
 
 int main(int argc, char **argv) {
     pthread_t tid[S+1];
-
-    for (int i=0;i<S;i++){
-        ARR_APAGAR[i]=0;
-    }
-    if (initPthreadVars() < 0){
-        return -1;
-    }
-    if(initClientsFHandle() < 0){
-        return -1;
-    }
-    if (initPCBuffers() < 0){
+    if (initPthreadVars() < 0 || initClientsFHandle() < 0 || initPCBuffers() < 0 || tfs_init()<0){
         return -1;
     }
     sender_t senderArgs[S];
-
-    if (tfs_init()<0){
-        return -1;
-    }
     if (argc < 2) {
         printf("Please specify the pathname of the server's pipe.\n");
         return 1;
@@ -518,7 +498,6 @@ int main(int argc, char **argv) {
         senderArgs[i].sessionID = i; 
         if (pthread_create(&tid[i],0,threadSender,&(senderArgs[i])) < 0){
            unlink(pipename);
-           //TODO verificar se aqui tambem damos close ao fd
            return -1; 
         }
     }
