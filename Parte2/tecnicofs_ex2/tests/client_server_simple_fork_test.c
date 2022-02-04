@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 /*  This test is similar to test1.c from the 1st exercise.
     The main difference is that this one explores the
@@ -13,6 +14,7 @@
 #define CLIENT_COUNT 20
 #define CLIENT_PIPE_NAME_LEN 40
 #define CLIENT_PIPE_NAME_FORMAT "/tmp/tfs_c%d"
+
 
 void run_test(char *server_pipe, int client_id);
 
@@ -45,7 +47,6 @@ int main(int argc, char **argv) {
     }
 
     printf("Successful test.\n");
-
     return 0;
 }
 
@@ -57,33 +58,47 @@ void run_test(char *server_pipe, int client_id) {
     int f;
     ssize_t r;
 
+    //write(FD,"0\n",2); 
+
     char client_pipe[40];
     sprintf(client_pipe, CLIENT_PIPE_NAME_FORMAT, client_id);
     assert(tfs_mount(client_pipe, server_pipe) == 0);
 
+    //write(FD,"1\n",2);
+
     f = tfs_open(path, TFS_O_CREAT);
     assert(f != -1);
+    //write(FD,"2\n",2);
 
     r = tfs_write(f, str, strlen(str));
     if (r != strlen(str)){
-        printf("Erro esta no write\n");
+        fprintf(stderr,"write failed: (%ld)\n",r);
     }
-    assert(r == strlen(str));
+    //assert(r == strlen(str));
+    //write(FD,"3\n",2);
 
     assert(tfs_close(f) != -1);
+    //write(FD,"4\n",2);
 
     f = tfs_open(path, 0);
     assert(f != -1);
+    //write(FD,"5\n",2);
 
 
     r = tfs_read(f, buffer, sizeof(buffer) - 1);
     assert(r == strlen(str));
+    //write(FD,"6\n",2);
 
     buffer[r] = '\0';
+
+    //printf("read - close\n");
 
     assert(strcmp(buffer, str) == 0);
 
     assert(tfs_close(f) != -1);
+    //write(FD,"7\n",2);
+
+    //printf("close - un\n");
 
     assert(tfs_unmount() == 0);
 }

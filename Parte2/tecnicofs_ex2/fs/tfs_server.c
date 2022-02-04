@@ -84,16 +84,21 @@ int getClientFhandle(int sessionId){
 int openClientSession(char* client_pipe_name, int sessionID){
     int fhandle = open(client_pipe_name,O_WRONLY);
     if (fhandle >= 0){
-        pthread_mutex_lock(&openClientSessionMutex);
+        if (pthread_mutex_lock(&openClientSessionMutex) < 0){
+            fprintf(stderr, "ERROR: Mutex failed to lock.\n");
+            exit(EXIT_FAILURE);
+        }
         clientsFHandle[sessionID] = fhandle;
-        pthread_mutex_unlock(&openClientSessionMutex);
+        if (pthread_mutex_unlock(&openClientSessionMutex) < 0) {
+            fprintf(stderr, "ERROR: Mutex failed to unlock.\n");
+            exit(EXIT_FAILURE);
+        }
         return fhandle;
     } else {
         fprintf(stderr, "ERROR: open client write channel.\n");
         exit(EXIT_FAILURE);
     }
     
-
 }
 
 int getAvailableSession(){
@@ -122,22 +127,26 @@ int finishClientSession(int sessionId){
     if (sessionId >= S){
         return -1;
     }
-    pthread_mutex_lock(&openClientSessionMutex);
+    if (pthread_mutex_lock(&openClientSessionMutex) < 0){
+        fprintf(stderr,"ERROR: Mutex failed to Lock\n");
+        exit(EXIT_FAILURE);
+    }
     clientsFHandle[sessionId] = -1;
-    pthread_mutex_unlock(&openClientSessionMutex);
+    if (pthread_mutex_unlock(&openClientSessionMutex) < 0){
+        fprintf(stderr,"ERROR: Mutex failed to Unlock\n");
+        exit(EXIT_FAILURE);
+    }
     return 0;
 }
 
 
 void handle_tfs_mount(char *bufferIn){
-    char bufferOut[sizeof(int)];
     char client_pipe_name[40];
     int fclient, sessionID;
     memcpy(&sessionID, bufferIn, sizeof(int));
     strcpy(client_pipe_name,&bufferIn[4]);
     fclient = openClientSession(client_pipe_name, sessionID);
-    memcpy(bufferOut,&sessionID,sizeof(int));
-    if (write(fclient,bufferOut,sizeof(int)) < 0 ){
+    if (write(fclient,&sessionID,sizeof(int)) < 0 ){
         if (finishClientSession(sessionID) < 0){
             fprintf(stderr,"ERROR: Invalid sessionID detected\n");
         }
@@ -146,7 +155,6 @@ void handle_tfs_mount(char *bufferIn){
 }
 
 void handle_tfs_unmount(char *bufferIn){
-    char bufferOut[sizeof(int)];
     int clientSessionID, fclient, out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
     out = 0;
@@ -154,8 +162,7 @@ void handle_tfs_unmount(char *bufferIn){
     if (fclient<0 || finishClientSession(clientSessionID)<0){
         out = -1;
     }
-    memcpy(bufferOut,&out,sizeof(int));
-    if (write(fclient,bufferOut,sizeof(int)) < 0){
+    if (write(fclient,&out,sizeof(int)) < 0){
         close(fclient);
     } else {
         close(fclient);
@@ -166,7 +173,6 @@ void handle_tfs_unmount(char *bufferIn){
 }
 
 void handle_tfs_open(char* bufferIn){
-    char bufferOut[sizeof(int)];
     char fileName[41];
     int clientSessionID, fclient, flags, out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
@@ -175,8 +181,7 @@ void handle_tfs_open(char* bufferIn){
     memcpy(&flags,&bufferIn[4 + strlen(fileName) + 1],sizeof(int));
     out = tfs_open(fileName,flags);
 
-    memcpy(bufferOut,&out,sizeof(int));
-    if (write(fclient,bufferOut,sizeof(int)) < 0){
+    if (write(fclient,&out,sizeof(int)) < 0){
         if (finishClientSession(clientSessionID) < 0){
             fprintf(stderr,"ERROR: Invalid sessionID detected\n");
         }
@@ -185,15 +190,13 @@ void handle_tfs_open(char* bufferIn){
 }
 
 void handle_tfs_close(char* bufferIn){
-    char bufferOut[sizeof(int)];
     int clientSessionID, fclient, fhandle, out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
     fclient = clientsFHandle[clientSessionID];
     memcpy(&fhandle,&bufferIn[4],sizeof(int));
     out = tfs_close(fhandle);
 
-    memcpy(bufferOut,&out,sizeof(int));
-    if (write(fclient,bufferOut,sizeof(int)) < 0){
+    if (write(fclient,&out,sizeof(int)) < 0){
         if (finishClientSession(clientSessionID) < 0){
             fprintf(stderr,"ERROR: Invalid sessionID detected\n");
         }
@@ -202,7 +205,6 @@ void handle_tfs_close(char* bufferIn){
 }
 
 void handle_tfs_write(char* bufferIn){
-    char bufferOut[sizeof(int)];
     char* toWrite;
     int clientSessionID, fclient, fhandle, out;
     size_t len;
@@ -211,11 +213,17 @@ void handle_tfs_write(char* bufferIn){
     memcpy(&fhandle,&bufferIn[4],sizeof(int));
     memcpy(&len,&bufferIn[8],sizeof(size_t));
     toWrite = (char*) malloc(sizeof(char)*len); 
+    if (toWrite == NULL){
+        fprintf(stderr, "ERROR: malloc error\n");
+        exit(EXIT_FAILURE);
+    }
     memcpy(toWrite,&bufferIn[16],len);
     out = (int) tfs_write(fhandle,toWrite,len);
+    if (out != 4){
+        fprintf(stderr,"Write failed on source\n");
+    }
     free(toWrite);
-    memcpy(bufferOut,&out,sizeof(int));
-    if (write(fclient,bufferOut,sizeof(int)) < 0){
+    if (write(fclient,&out,sizeof(int)) < 0){
         if (finishClientSession(clientSessionID) < 0){
             fprintf(stderr,"ERROR: Invalid sessionID detected\n");
         }
@@ -228,12 +236,13 @@ void handle_tfs_read(char* bufferIn){
     size_t len;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
     fclient = clientsFHandle[clientSessionID];
-    memcpy(&fhandle,&bufferIn[4],sizeof(int));
-    memcpy(&len,&bufferIn[8],sizeof(size_t));
-    char bufferOut[sizeof(char)*len + sizeof(int)];
+    memcpy(&fhandle,&bufferIn[sizeof(int)],sizeof(int));
+    memcpy(&len,&bufferIn[2*sizeof(int)],sizeof(size_t));
+    size_t numberOfBytes = ((sizeof(char)*len)+sizeof(int));
+    char bufferOut[numberOfBytes];
     out = (int) tfs_read(fhandle,&bufferOut[sizeof(int)],len);
     memcpy(bufferOut,&out,sizeof(int));
-    if (write(fclient,bufferOut,sizeof(char)*len + sizeof(int)) < 0){
+    if (write(fclient,bufferOut,numberOfBytes) < 0){
         if (finishClientSession(clientSessionID) < 0){
             fprintf(stderr,"ERROR: Invalid sessionID detected\n");
         }
@@ -243,14 +252,12 @@ void handle_tfs_read(char* bufferIn){
 
 
 void handle_tfs_shutdown_after_all_closed(char* bufferIn){
-    char bufferOut[sizeof(int)];
     int clientSessionID, fclient, out;
     memcpy(&clientSessionID,bufferIn,sizeof(int));
     fclient = clientsFHandle[clientSessionID];
     out = tfs_destroy_after_all_closed();
 
-    memcpy(bufferOut,&out,sizeof(int));
-    if (write(fclient,bufferOut,sizeof(int)) < 0){
+    if (write(fclient,&out,sizeof(int)) < 0){
         if (finishClientSession(clientSessionID) < 0){
             fprintf(stderr,"ERROR: Invalid sessionID detected\n");
         }
@@ -263,7 +270,11 @@ void handle_tfs_shutdown_after_all_closed(char* bufferIn){
 char getClientInfoMaxSize(char opCode, size_t* len, char mode){
     switch (opCode) {
     case 1:
-        *len = (size_t) (41 - mode);
+        if (mode){
+            *len = 40;
+        } else {
+            *len = 45;
+        }
         break;
     case 2:
         *len = (size_t) (5 - mode);
@@ -305,10 +316,10 @@ clientRequestInfo getClientRequestInfo(char opCode, char* bufferFromClient){
 
 void sendUserCountFullMessage(char* bufferIn){
     char client_pipe_name[40];
-    char out = -1;
+    int out = -1;
     strcpy(client_pipe_name, &bufferIn[1]);
     int fhandle = open(client_pipe_name, O_WRONLY);
-    if(write(fhandle, &out, sizeof(char)) < 0){
+    if(write(fhandle, &out, sizeof(int)) < 0){
         fprintf(stderr, "ERROR: Unable to contact client.\n");
         exit(EXIT_FAILURE);
     }
@@ -327,13 +338,12 @@ char readFromPipe(const char* pipename, int pipeFD, void* buffer, size_t nBytes)
     if (!readOut){
         pipeFD = open(pipename, O_RDONLY);
         if(pipeFD < 0){
-            //TODO struct for error, or exit(error) (algo assim)
             fprintf(stderr, "ERROR: Server failed to open pipe.\n");
             exit(EXIT_FAILURE);
         } else {
             return 1;
         }
-    } else if (readOut == -1) { //TODO, just here for debuging (maybe)
+    } else if (readOut == -1) { 
         fprintf(stderr, "ERROR: Server failed to read from pipe.\n");
         exit(EXIT_FAILURE);
     } 
@@ -345,10 +355,13 @@ char readFromPipe(const char* pipename, int pipeFD, void* buffer, size_t nBytes)
 // código para a thread que recebe info dos clientes
 void* threadReceiver(void* server_pipe_name){
     char* pipename = (char*) server_pipe_name;
-    int ola = 0;
     size_t bytesToRead = 0;
     clientRequestInfo clientInfo;
-    char bufferIn[INPUT_BUFFER_SIZE];
+    char* bufferIn = (char*) malloc(INPUT_BUFFER_SIZE*sizeof(char));
+    if (bufferIn == NULL){
+        fprintf(stderr,"ERROR: Malloc error\n");
+        exit(EXIT_FAILURE);
+    }
     char opCode;
     if(mkfifo(pipename,0777) < 0){
         fprintf(stderr, "ERROR: while creating server channel.\n");
@@ -366,6 +379,7 @@ void* threadReceiver(void* server_pipe_name){
             !getClientInfoMaxSize(opCode,&bytesToRead,1) &&
             !readFromPipe(pipename,fserver,&bufferIn[1],bytesToRead)) { 
             bufferIn[0] = opCode;
+            //APAGAR_FN(bufferIn);
             clientInfo = getClientRequestInfo(opCode,bufferIn);
             if (clientInfo.sessionID < 0){
                 clientInfo.sessionID = getAvailableSession();
@@ -389,7 +403,7 @@ void* threadReceiver(void* server_pipe_name){
             }
             
         }
-        ola++; //APAGAR
+
     }
 }
 
@@ -436,7 +450,7 @@ char runClientRequest(char* info){
 void* threadSender(void* arg){
     sender_t* info = (sender_t*) arg;
     int sessionID = info->sessionID;
-    char buffer[1041];
+    char* buffer = (char*) malloc(sizeof(char)*1041);
     char shutdown;
     if (pthread_mutex_lock(&(sessionsMutexes[sessionID])) < 0){
         fprintf(stderr, "ERROR: Internal server fatal error.\n");
@@ -466,6 +480,10 @@ void* threadSender(void* arg){
 
 int main(int argc, char **argv) {
     pthread_t tid[S+1];
+
+    for (int i=0;i<S;i++){
+        ARR_APAGAR[i]=0;
+    }
     if (initPthreadVars() < 0){
         return -1;
     }

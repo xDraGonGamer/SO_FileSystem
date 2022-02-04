@@ -189,7 +189,6 @@ static ssize_t _tfs_write_unsynchronized(int fhandle, void const *buffer,
             inode->i_size = file->of_offset;
         }
     }
-
     return (ssize_t)to_write;
 }
 
