@@ -6,7 +6,7 @@
 #include <signal.h>
 
 #define INPUT_BUFFER_SIZE 1041 //buffer for info from client
-#define MAX_THREAD_INPUT_SIZE 2000 //TODO
+#define MAX_THREAD_INPUT_SIZE 1041 
 #define BUFFER_PARTS 4 //try to implement later
 
 
@@ -34,6 +34,12 @@ int clientsFHandle[S]; //client table
 pthread_cond_t sessionsCondVars[S];
 pthread_mutex_t sessionsMutexes[S];
 pthread_mutex_t openClientSessionMutex;
+
+clientRequestInfo nullClientInfo(){
+    clientRequestInfo cinfo;
+    cinfo.sessionID = 0; cinfo.clientInfoMaxSize = 0;
+    return cinfo;
+}
 
 char initPCBuffers(){
     for (int i=0;i<S;i++){
@@ -252,31 +258,47 @@ void handle_tfs_shutdown_after_all_closed(char* bufferIn){
     } 
 }
 
+/* mode 1: Usado quando estamos a ler do pipe do servidor
+ mode 0: Usado quando estamos a mandar para o bufferPC*/
+char getClientInfoMaxSize(char opCode, size_t* len, char mode){
+    switch (opCode) {
+    case 1:
+        *len = (size_t) (41 - mode);
+        break;
+    case 2:
+        *len = (size_t) (5 - mode);
+        break;
+    case 3:
+        *len = (size_t) (49 - mode);
+        break;
+    case 4:
+        *len = (size_t) (9 - mode);
+        break;
+    case 5:
+        *len = (size_t) (1041 - mode);
+        break;
+    case 6:
+        *len = (size_t) (17 - mode);
+        break;
+    case 7:
+        *len = (size_t) (5 - mode);
+        break;
+    default:
+        fprintf(stderr, "ERROR: Client message opCode is wrong (%d)\n",opCode);
+        break;
+    }
+    return 0;
+}
+
+
+
 clientRequestInfo getClientRequestInfo(char opCode, char* bufferFromClient){
-    clientRequestInfo clientInfo;
+    clientRequestInfo clientInfo = nullClientInfo(); //supress warning
     if (opCode==1){
         clientInfo.sessionID = -1;
     } else {
         memcpy(&(clientInfo.sessionID),&bufferFromClient[1],sizeof(int));
-        switch (opCode){
-            case 2:
-                clientInfo.clientInfoMaxSize = 5;
-                break;
-            case 3:
-                clientInfo.clientInfoMaxSize = 49;
-                break;
-            case 4:
-                clientInfo.clientInfoMaxSize = 9;
-                break;
-            case 5:
-                clientInfo.clientInfoMaxSize = 1041;
-                break;
-            case 6:
-                clientInfo.clientInfoMaxSize = 17;
-                break;
-            default: // case 7
-                clientInfo.clientInfoMaxSize = 5;
-        }
+        getClientInfoMaxSize(opCode,&clientInfo.clientInfoMaxSize,0);
     }
     return clientInfo;
 }
@@ -300,10 +322,31 @@ void writeToBufferPC(char* bufferIn, clientRequestInfo clientInfo){
     pthread_mutex_unlock(&sessionsMutexes[clientInfo.sessionID]);
 }
 
+char readFromPipe(const char* pipename, int pipeFD, void* buffer, size_t nBytes){
+    ssize_t readOut = read(pipeFD, buffer, nBytes);
+    if (!readOut){
+        pipeFD = open(pipename, O_RDONLY);
+        if(pipeFD < 0){
+            //TODO struct for error, or exit(error) (algo assim)
+            fprintf(stderr, "ERROR: Server failed to open pipe.\n");
+            exit(EXIT_FAILURE);
+        } else {
+            return 1;
+        }
+    } else if (readOut == -1) { //TODO, just here for debuging (maybe)
+        fprintf(stderr, "ERROR: Server failed to read from pipe.\n");
+        exit(EXIT_FAILURE);
+    } 
+    return 0;
+}
+
+
+
 // código para a thread que recebe info dos clientes
 void* threadReceiver(void* server_pipe_name){
     char* pipename = (char*) server_pipe_name;
-    ssize_t readOut;
+    int ola = 0;
+    size_t bytesToRead = 0;
     clientRequestInfo clientInfo;
     char bufferIn[INPUT_BUFFER_SIZE];
     char opCode;
@@ -319,25 +362,10 @@ void* threadReceiver(void* server_pipe_name){
         exit(EXIT_FAILURE);
     }
     while (1){
-        readOut = read(fserver, bufferIn, INPUT_BUFFER_SIZE);
-        if (!readOut){
-            fserver = open(pipename, O_RDONLY);
-            if(fserver < 0){
-                //TODO struct for error, or exit(error) (algo assim)
-                fprintf(stderr, "ERROR: Server failed to open client read channel.\n");
-                exit(EXIT_FAILURE);
-            }
-        } else if (readOut == -1) { //TODO, just here for debuging (maybe)
-            fprintf(stderr, "ERROR: Server failed to read from pipe.\n");
-            exit(EXIT_FAILURE);
-        } else {
-            memcpy(&opCode,bufferIn,sizeof(char));
-            if (!opCode){
-                printf("OPCODE IS 0\n");
-                for (int i=0; i<1041; i++){
-                    printf("%c, ",bufferIn[i]);
-                }printf("\n");
-            }
+        if (!readFromPipe(pipename,fserver,&opCode,sizeof(char)) &&
+            !getClientInfoMaxSize(opCode,&bytesToRead,1) &&
+            !readFromPipe(pipename,fserver,&bufferIn[1],bytesToRead)) { 
+            bufferIn[0] = opCode;
             clientInfo = getClientRequestInfo(opCode,bufferIn);
             if (clientInfo.sessionID < 0){
                 clientInfo.sessionID = getAvailableSession();
@@ -361,6 +389,7 @@ void* threadReceiver(void* server_pipe_name){
             }
             
         }
+        ola++; //APAGAR
     }
 }
 

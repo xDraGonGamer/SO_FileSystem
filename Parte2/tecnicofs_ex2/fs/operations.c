@@ -164,7 +164,6 @@ static ssize_t _tfs_write_unsynchronized(int fhandle, void const *buffer,
     if (inode == NULL) {
         return -1;
     }
-
     /* Determine how many bytes to write */
     if (to_write + file->of_offset > BLOCK_SIZE) {
         to_write = BLOCK_SIZE - file->of_offset;

@@ -65,6 +65,9 @@ void run_test(char *server_pipe, int client_id) {
     assert(f != -1);
 
     r = tfs_write(f, str, strlen(str));
+    if (r != strlen(str)){
+        printf("Erro esta no write\n");
+    }
     assert(r == strlen(str));
 
     assert(tfs_close(f) != -1);

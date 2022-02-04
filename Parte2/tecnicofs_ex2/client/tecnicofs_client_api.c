@@ -64,7 +64,7 @@ int tfs_unmount() {
     if (buffer[0]!=2){
         printf("Erro esta na API\n");
     }
-    if (write(fserver, buffer, 41) < 0){
+    if (write(fserver, buffer, 5) < 0){
         return -1;
     }
     if (read(fclient, &serverAnswer, sizeof(int)) < 0){
